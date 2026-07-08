@@ -1,0 +1,50 @@
+@import "tailwindcss";
+
+@theme {
+  --font-sans: 'Inter', system-ui, sans-serif;
+}
+
+/* Custom Utilities for Glassmorphism and Animations */
+@layer utilities {
+  .glass-panel {
+    @apply bg-zinc-900/40 backdrop-blur-xl border border-white/5 shadow-2xl;
+  }
+  
+  .glass-card {
+    @apply bg-zinc-900/60 backdrop-blur-md border border-white/5 hover:border-indigo-500/30 transition-all duration-300;
+  }
+
+  .neon-text {
+    text-shadow: 0 0 10px rgba(99, 102, 241, 0.5);
+  }
+  
+  .neon-border {
+    box-shadow: 0 0 15px rgba(99, 102, 241, 0.2), inset 0 0 15px rgba(99, 102, 241, 0.1);
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background-color: #09090b; /* zinc-950 */
+  background-image: 
+    radial-gradient(circle at 15% 50%, rgba(99, 102, 241, 0.08), transparent 25%),
+    radial-gradient(circle at 85% 30%, rgba(168, 85, 247, 0.08), transparent 25%);
+  background-attachment: fixed;
+}
+
+/* Custom Scrollbar for a premium feel */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}

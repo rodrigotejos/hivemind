@@ -1,0 +1,13 @@
+{
+  "name": "ai-dlc-monorepo",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npx concurrently \"npm run dev -w @ai-dlc/sdk\" \"npm run dev -w @ai-dlc/server\" \"npm run dev -w web\"",
+    "build": "npm run build --workspaces --if-present",
+    "test": "npm run test --workspaces --if-present"
+  }
+}
