@@ -9,7 +9,6 @@ export default function ProjectView() {
   const { id } = useParams();
   const [project, setProject] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
-  const [summary, setSummary] = useState<string>('Analizando o contexto do projeto...');
 
   useEffect(() => {
     fetch(`${API_URL}/api/projects/${id}`)

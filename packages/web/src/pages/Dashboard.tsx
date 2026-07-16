@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Activity, Server, Plus, ChevronRight } from 'lucide-react';
+import { Activity, Plus, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import NotificationBell from '../components/NotificationBell';
 

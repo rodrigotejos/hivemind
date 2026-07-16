@@ -54,6 +54,9 @@ router.post('/', async (req, res) => {
       updateSharedContext((project as any).shared_context || '', `Agente ${fromAgentId} [${type}]: ${content}`)
         .then(newContext => {
           queries.updateProjectContext(projectId, newContext);
+          if (io) {
+            io.to(`project_${projectId}`).emit('project_updated', { project: queries.getProject(projectId) });
+          }
         })
         .catch(e => console.error('Failed to update context', e));
     }

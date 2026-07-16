@@ -1,7 +1,6 @@
 import { Bot, User, CornerDownRight, Reply } from 'lucide-react';
 
 export default function MessageBubble({ message, isMe, agentName, onReply }: { message: any, isMe: boolean, agentName?: string, onReply?: () => void }) {
-  const isAI = message.from_agent_id !== 'rodrigo';
   const isQuestion = message.type === 'question';
   const isAnswer = message.type === 'answer';
   const isBlocker = message.type === 'blocker';

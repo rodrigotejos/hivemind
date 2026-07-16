@@ -20,9 +20,11 @@ router.post('/', (req, res) => {
   const project = queries.createProject(name, description);
   
   // Background task: generate context
-  aiManager.generateInitialContext(name, description).then(context => {
-    queries.updateProjectContext(project.id as string, context);
-  }).catch(e => console.error('Failed to generate initial context', e));
+  if (project) {
+    aiManager.generateInitialContext(name, description).then(context => {
+      queries.updateProjectContext((project as any).id as string, context);
+    }).catch(e => console.error('Failed to generate initial context', e));
+  }
 
   res.status(201).json(project);
 });
@@ -63,6 +65,12 @@ router.post('/:id/context/analyze', async (req, res) => {
   try {
     const newContext = await aiManager.expandContextWithRealData((project as any).shared_context || '', analysisData);
     queries.updateProjectContext(id, newContext);
+    
+    const io = req.app.get('io');
+    if (io) {
+      io.to(`project_${id}`).emit('project_updated', { project: queries.getProject(id) });
+    }
+
     res.json({ success: true, newContext });
   } catch (err: any) {
     res.status(500).json({ error: err.message });

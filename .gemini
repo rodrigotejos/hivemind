@@ -1,0 +1,37 @@
+# Contexto do Projeto: AI-DLC (Hivemind)
+
+Registrado em: 2026-07-16
+
+## Visão Geral do Repositório
+O projeto **AI-DLC (AI Development Lifecycle Coordinator)** é um monorepo para orquestração de múltiplos agentes de IA (e humanos) colaborando em projetos de código. 
+
+A arquitetura e especificações estão detalhadas no arquivo [arquitetura.md](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/arquitetura.md).
+
+## Estrutura do Projeto (Monorepo)
+O projeto está dividido nas seguintes pastas dentro de `packages/`:
+- **`packages/sdk`**: Contém o SDK para agentes se integrarem ao ecossistema.
+- **`packages/server`**: Servidor Node.js/Express integrado com Socket.IO para mensagens em tempo real e banco de dados SQLite (`database.sqlite`). Contém serviços de gerenciamento de IA (LangChain) no arquivo [ai-manager.ts](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/server/src/services/ai-manager.ts).
+- **`packages/web`**: Cliente React com Vite + TailwindCSS para o Dashboard humano.
+- **`simulate.js`**: Script utilitário na raiz para rodar fluxos automatizados de simulação de mensagens, blockers e escalações de agentes.
+
+## Estado Atual
+O repositório possui as bases do MVP v0.1 implementadas (Servidor Express/Socket.IO, Banco de dados SQLite, Client Web React).
+
+### Alterações Realizadas:
+1. **Configuração de Env**: Criação dos arquivos `.env` na raiz e em `packages/server` configurando a porta `3001` e a chave `GOOGLE_API_KEY` fornecida pelo usuário.
+2. **Correção de Tipagem (Build)**:
+   - Corrigido `project` possivelmente `undefined` em [projects.ts](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/server/src/routes/projects.ts#L24).
+   - Removidos imports e declarações de variáveis não utilizadas em [MessageBubble.tsx](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/web/src/components/MessageBubble.tsx), [Dashboard.tsx](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/web/src/pages/Dashboard.tsx) e [ProjectView.tsx](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/web/src/pages/ProjectView.tsx) para resolver erros de compilação do TypeScript.
+3. **Script de Simulação Personalizado**:
+   - Criação de [simulate-bi.js](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/simulate-bi.js) para inicializar a simulação focada no novo projeto `dashboard-bi`.
+4. **Execução**:
+   - Dependências instaladas (`npm install`).
+   - Compilação realizada com sucesso (`npm run build`).
+   - Servidor de desenvolvimento iniciado com sucesso (`npm run dev`).
+5. **Real-time Context Panel no Chat (Split-Screen)**:
+   - Modificado o backend para emitir o evento Socket.IO `project_updated` em [messages.ts](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/server/src/routes/messages.ts) e [projects.ts](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/server/src/routes/projects.ts) sempre que o contexto compartilhado for alterado.
+   - Redesenhada a tela de chat [MessagesView.tsx](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/packages/web/src/pages/MessagesView.tsx) para introduzir um layout split-screen.
+6. **Limpeza de Agentes Simulados**:
+   - Criado e executado [clean-bi.js](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/clean-bi.js) para resetar o banco de dados e iniciar o `dashboard-bi` limpo apenas com o Rodrigo, permitindo conectar os agentes reais dele. Novo ID do projeto: `fbc915c23d685eb3`.
+7. **Documento de Instruções de Agente**:
+   - Salvo o prompt de delegação no arquivo [agent-delegation-prompt.md](file:///C:/Users/RodrigoTejos/OneDrive - Rock Encantech/Documentos/prog/hivemind/agent-delegation-prompt.md) na raiz do projeto para fácil referência futura.
