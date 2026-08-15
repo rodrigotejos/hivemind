@@ -1,0 +1,11 @@
+{
+    "schema_version": 2,
+    "commit": "eb74999bf8c322a8929fc30603307bd8a49c3d8c",
+    "indexed_at": "2026-08-15T23:51:20Z",
+    "project": "E-code-hivemind",
+    "nodes": 315,
+    "edges": 415,
+    "original_size": 1572864,
+    "compressed_size": 174783,
+    "compression_level": 9
+}
