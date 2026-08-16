@@ -332,6 +332,7 @@ export default function CockpitPanel({
                   title="Escolha o modelo de IA que coordenará esta tarefa"
                 >
                   <option value="auto" className="bg-zinc-900 text-indigo-300 font-semibold">✨ Auto (Adapta por complexidade)</option>
+                  <option value="gemini-flex" className="bg-zinc-900 text-emerald-400 font-semibold">💸 Modo Flex (Ultra Econômico / Mais Barato)</option>
                   <option value="gemini-3.5-flash-lite" className="bg-zinc-900 text-white">⚡ 3.5 Flash Lite (Ultra Rápido)</option>
                   <option value="gemini-3.5-flash" className="bg-zinc-900 text-white">⚡ 3.5 Flash (Equilibrado)</option>
                   <option value="gemini-3.6-flash" className="bg-zinc-900 text-white">🎯 3.6 Flash (Alta Precisão)</option>

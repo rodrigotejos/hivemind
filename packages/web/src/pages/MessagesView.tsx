@@ -588,6 +588,7 @@ export default function MessagesView() {
                     className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
                   >
                     <option value="auto">✨ Auto (Adaptativo)</option>
+                    <option value="gemini-flex">💸 Modo Flex (Ultra Econômico)</option>
                     <option value="gemini-3.5-flash-lite">⚡ 3.5 Flash Lite</option>
                     <option value="gemini-3.5-flash">⚡ 3.5 Flash</option>
                     <option value="gemini-3.6-flash">🎯 3.6 Flash</option>

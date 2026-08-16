@@ -63,7 +63,9 @@ export function resolveModelConfig(
 
   // Mapeamento normalizado para a API do Google Gemini 3
   let actualModelName = 'gemini-3.7-flash';
-  if (targetModel.includes('3.5-flash-lite') || targetModel.includes('lite')) {
+  if (targetModel.includes('flex')) {
+    actualModelName = 'gemini-3.5-flash-lite'; // Modo Flex: ultra econômico e rápido
+  } else if (targetModel.includes('3.5-flash-lite') || targetModel.includes('lite')) {
     actualModelName = 'gemini-3.5-flash-lite';
   } else if (targetModel.includes('3.6-flash')) {
     actualModelName = 'gemini-3.6-flash';
