@@ -8,6 +8,8 @@ export interface CLIExecutionRequest {
   agentRole: string;
   agentId: string;
   prompt: string;
+  model?: string;
+  reasoningLevel?: string;
   cwd?: string;
   threadId?: string;
   conversationId?: string;
@@ -124,11 +126,15 @@ export class BridgeDaemonService {
       let outputBuffer = '';
       let isSettled = false;
 
-      // Executa o Antigravity CLI (agy) no modo auto, sem prompt interativo, aprovando permissões de ferramentas
+      // Executa o Antigravity CLI (agy) com o modelo dinamicamente resolvido pelo gerenciador
       const args = [
         '-p', request.prompt,
         '--dangerously-skip-permissions',
       ];
+
+      if (request.model) {
+        args.push('--model', request.model);
+      }
 
       if (request.cwd) {
         args.push('--add-dir', request.cwd);

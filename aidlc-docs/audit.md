@@ -110,6 +110,12 @@
 **AI Response**: "Configured global defaults across Cockpit, Task Sessions, AI Manager, LangGraph and Antigravity execution to Gemini 3.7 Flash with Reasoning: Low (~2k tokens budget)."
 **Context**: Configuration Update - Default Model & Reasoning Budget.
 
+## Auto-Manager Default with Dynamic CLI Model & Reasoning Effort Dispatch
+**Timestamp**: 2026-08-15T22:56:25-03:00
+**User Input**: "muda de novo, o gerenciador vai semr ep ser auto de incioo. dentro do antigravity cli vai ser decidio pelo gerneicod tambem. entre os modele e efrt disponiveis."
+**AI Response**: "Configured manager default to 'auto'. Integrated dynamic model resolution and reasoning effort injection directly into Antigravity CLI (agy) subprocess invocations based on task complexity."
+**Context**: Feature Enhancement - Dynamic Auto Manager with CLI Effort & Model Dispatch.
+
 ---
 
 

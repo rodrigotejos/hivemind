@@ -1,6 +1,6 @@
 import { AgentGraphStateType, GraphMessage } from './state';
 import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
-import { getModel, updateSharedContext } from '../ai-manager';
+import { getModel, resolveModelConfig, updateSharedContext } from '../ai-manager';
 import { BridgeDaemonService } from '../bridge/bridge-daemon';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
@@ -126,8 +126,9 @@ Responda diretamente em português com tom de engenharia de software sênior de 
     `.trim();
 
     let agentResponseText = '';
+    const resolved = resolveModelConfig(state.model || 'auto', state.goal, state.reasoningLevel || 'medium');
 
-    // 1. Tenta executar via Antigravity CLI (BridgeDaemon) em modo local no repositório do projeto
+    // 1. Tenta executar via Antigravity CLI (BridgeDaemon) com modelo dinâmico no repositório do projeto
     try {
       const bridge = BridgeDaemonService.getInstance();
       const cliResult = await bridge.dispatch({
@@ -135,9 +136,11 @@ Responda diretamente em português com tom de engenharia de software sênior de 
         agentRole: role,
         agentId: agentName,
         prompt: actionPrompt,
+        model: resolved.actualModelName,
+        reasoningLevel: resolved.reasoningLevel,
         cwd: projectPath || undefined,
         threadId: state.sessionId,
-        timeoutMs: 120000,
+        timeoutMs: 180000,
       });
 
       if (cliResult && cliResult.success && cliResult.output.trim()) {
