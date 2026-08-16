@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { ArrowLeft, BrainCircuit, Users, Terminal, Sparkles } from 'lucide-react';
 import AgentStatus from '../components/AgentStatus';
+import CockpitPanel from '../components/CockpitPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -30,8 +31,8 @@ export default function ProjectView() {
   );
 
   return (
-    <div className="p-8 max-w-7xl mx-auto min-h-screen">
-      <div className="mb-10 flex flex-col md:flex-row md:items-center gap-6 justify-between">
+    <div className="p-8 max-w-7xl mx-auto min-h-screen space-y-8">
+      <div className="flex flex-col md:flex-row md:items-center gap-6 justify-between">
         <div className="flex items-center gap-6">
           <Link to="/" className="p-3 bg-zinc-900/50 border border-white/5 rounded-xl hover:bg-zinc-800 hover:border-indigo-500/50 transition-all text-zinc-400 hover:text-white group">
             <ArrowLeft size={20} className="group-hover:-translate-x-1 transition-transform" />
@@ -52,6 +53,9 @@ export default function ProjectView() {
           Terminal do Projeto
         </Link>
       </div>
+
+      {/* Cockpit Human-in-the-Loop & Governança */}
+      <CockpitPanel projectId={id || ''} apiUrl={API_URL} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
