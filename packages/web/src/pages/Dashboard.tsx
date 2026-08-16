@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { io, Socket } from 'socket.io-client';
-import { Activity, Plus, ChevronRight } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Activity, Plus, ChevronRight, X, Folder, Sparkles } from 'lucide-react';
+import { Link, useNavigate } from 'react-router-dom';
 import NotificationBell from '../components/NotificationBell';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
@@ -10,28 +10,44 @@ interface Project {
   id: string;
   name: string;
   description: string;
+  path?: string;
   status: string;
 }
 
 const ME_ID = 'rodrigo'; // Mock human ID
 
 export default function Dashboard() {
+  const navigate = useNavigate();
   const [projects, setProjects] = useState<Project[]>([]);
   const [notifications, setNotifications] = useState<any[]>([]);
   const [, setSocket] = useState<Socket | null>(null);
   const [connected, setConnected] = useState(false);
 
-  useEffect(() => {
-    // Fetch projects
+  // Modal State
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [path, setPath] = useState('');
+  const [isCreating, setIsCreating] = useState(false);
+
+  const fetchProjects = () => {
     fetch(`${API_URL}/api/projects`)
       .then(res => res.json())
-      .then(data => setProjects(data))
+      .then(data => {
+        if (Array.isArray(data)) setProjects(data);
+      })
       .catch(err => console.error('Error fetching projects:', err));
-      
+  };
+
+  useEffect(() => {
+    fetchProjects();
+
     // Fetch notifications
     fetch(`${API_URL}/api/notifications/${ME_ID}`)
       .then(res => res.json())
-      .then(data => setNotifications(data))
+      .then(data => {
+        if (Array.isArray(data)) setNotifications(data);
+      })
       .catch(err => console.error('Error fetching notifs:', err));
 
     // Connect to Socket.IO
@@ -62,6 +78,37 @@ export default function Dashboard() {
   const markAllRead = () => {
     fetch(`${API_URL}/api/notifications/${ME_ID}/read-all`, { method: 'POST' })
       .then(() => setNotifications(prev => prev.map(n => ({...n, read: true}))));
+  };
+
+  const handleCreateProject = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!name.trim()) return;
+
+    setIsCreating(true);
+    try {
+      const res = await fetch(`${API_URL}/api/projects`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: name.trim(),
+          description: description.trim() || 'Projeto gerenciado pelo Hivemind AI-DLC',
+          path: path.trim() || undefined,
+        }),
+      });
+
+      const created = await res.json();
+      if (created && created.id) {
+        setIsModalOpen(false);
+        setName('');
+        setDescription('');
+        setPath('');
+        navigate(`/projects/${created.id}`);
+      }
+    } catch (err) {
+      console.error('Erro ao criar projeto:', err);
+    } finally {
+      setIsCreating(false);
+    }
   };
 
   return (
@@ -97,19 +144,30 @@ export default function Dashboard() {
         <h2 className="text-xl font-medium text-white flex items-center gap-2">
           Projetos Ativos <span className="text-xs py-0.5 px-2 bg-indigo-500/20 text-indigo-400 rounded-full">{projects.length}</span>
         </h2>
-        <button className="flex items-center gap-2 text-sm font-medium text-zinc-400 hover:text-white transition-colors">
+        <button 
+          onClick={() => setIsModalOpen(true)}
+          className="flex items-center gap-2 px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition-all shadow-lg cursor-pointer"
+        >
           <Plus size={16} /> Novo Projeto
         </button>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {projects.length === 0 ? (
-          <div className="col-span-full text-center py-20 glass-card rounded-2xl flex flex-col items-center justify-center">
-            <div className="w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center mb-4">
-              <Activity className="text-zinc-500" size={24} />
+          <div className="col-span-full text-center py-20 glass-card rounded-2xl flex flex-col items-center justify-center border border-dashed border-zinc-800">
+            <div className="w-16 h-16 rounded-full bg-zinc-800/80 flex items-center justify-center mb-4 text-indigo-400">
+              <Sparkles size={26} />
             </div>
-            <h3 className="text-lg font-medium text-zinc-300 mb-1">Nenhum projeto encontrado</h3>
-            <p className="text-zinc-500 text-sm">Crie um novo projeto para orquestrar seus agentes AI.</p>
+            <h3 className="text-lg font-medium text-zinc-200 mb-1">Nenhum projeto registrado</h3>
+            <p className="text-zinc-500 text-sm max-w-sm mb-6">
+              Adicione um projeto existente ou crie um novo para orquestrar seus agentes autônomos.
+            </p>
+            <button 
+              onClick={() => setIsModalOpen(true)}
+              className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-sm font-semibold transition-all shadow-lg flex items-center gap-2 cursor-pointer"
+            >
+              <Plus size={16} /> Criar Primeiro Projeto
+            </button>
           </div>
         ) : (
           projects.map(project => (
@@ -128,10 +186,9 @@ export default function Dashboard() {
                 
                 <div className="flex items-center justify-between pt-4 border-t border-zinc-800/50 mt-auto relative z-10">
                   <div className="flex -space-x-2">
-                    {/* Placeholder for agent avatars */}
-                    <div className="w-8 h-8 rounded-full bg-indigo-900 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-indigo-300">AI</div>
-                    <div className="w-8 h-8 rounded-full bg-cyan-900 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-cyan-300">AI</div>
-                    <div className="w-8 h-8 rounded-full bg-emerald-900 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-emerald-300">HM</div>
+                    <div className="w-8 h-8 rounded-full bg-indigo-900 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-indigo-300">FE</div>
+                    <div className="w-8 h-8 rounded-full bg-cyan-900 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-cyan-300">BE</div>
+                    <div className="w-8 h-8 rounded-full bg-emerald-900 border-2 border-zinc-900 flex items-center justify-center text-[10px] font-bold text-emerald-300">QA</div>
                   </div>
                   <span className="flex items-center text-sm font-medium text-indigo-400 group-hover:translate-x-1 transition-transform">
                     Acessar <ChevronRight size={16} className="ml-1" />
@@ -142,6 +199,83 @@ export default function Dashboard() {
           ))
         )}
       </div>
+
+      {/* Modal: Criar / Inserir Projeto */}
+      {isModalOpen && (
+        <div className="fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-lg w-full p-6 shadow-2xl space-y-5 relative">
+            <div className="flex items-center justify-between">
+              <h3 className="font-bold text-white text-lg flex items-center gap-2">
+                <Folder size={20} className="text-indigo-400" />
+                Adicionar Novo Projeto
+              </h3>
+              <button onClick={() => setIsModalOpen(false)} className="text-zinc-500 hover:text-zinc-300 cursor-pointer">
+                <X size={18} />
+              </button>
+            </div>
+
+            <p className="text-xs text-zinc-400">
+              Cadastre um projeto para gerenciamento autônomo com LangGraph, telemetria e agentes especializados.
+            </p>
+
+            <form onSubmit={handleCreateProject} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Nome do Projeto *</label>
+                <input
+                  type="text"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Ex: Minha Aplicação Web, E-commerce, Hivemind..."
+                  required
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-sm text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Caminho Local do Repositório (Opcional)</label>
+                <input
+                  type="text"
+                  value={path}
+                  onChange={(e) => setPath(e.target.value)}
+                  placeholder="Ex: e:\code\meu-projeto ou C:\projetos\app"
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-200 focus:outline-none focus:border-indigo-500"
+                />
+                <span className="text-[11px] text-zinc-500 mt-1 block">
+                  Permite executar o Auto-Setup de regras AI-DLC e MCP diretamente no diretório do projeto.
+                </span>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-zinc-300 mb-1.5">Descrição / Metas</label>
+                <textarea
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Ex: Projeto React 19 + Express com foco em alta performance e testes PBT..."
+                  rows={3}
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-3 border-t border-zinc-800">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 bg-zinc-800 hover:bg-zinc-700 text-zinc-300 text-xs font-medium rounded-xl transition-colors cursor-pointer"
+                >
+                  Cancelar
+                </button>
+                <button
+                  type="submit"
+                  disabled={!name.trim() || isCreating}
+                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white text-xs font-semibold rounded-xl transition-colors shadow-lg cursor-pointer"
+                >
+                  {isCreating ? 'Criando...' : 'Criar e Orquestrar'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

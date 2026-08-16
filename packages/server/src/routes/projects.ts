@@ -1,4 +1,3 @@
-import express from 'express';
 import { Router } from 'express';
 import * as queries from '../db/queries';
 import * as aiManager from '../services/ai-manager';
@@ -13,16 +12,40 @@ router.get('/', (req, res) => {
 
 // POST /api/projects
 router.post('/', (req, res) => {
-  const { name, description } = req.body;
+  const { name, description, path } = req.body;
   if (!name) {
     return res.status(400).json({ error: 'Name is required' });
   }
-  const project = queries.createProject(name, description);
+
+  const project = queries.createProject(name, description, undefined, path);
   
-  // Background task: generate context
   if (project) {
+    const projectId = (project as any).id as string;
+
+    // Vincula agentes padrão ao projeto
+    const defaultAgents = [
+      { id: 'rodrigo', role: 'manager' },
+      { id: 'alpha-frontend', role: 'worker' },
+      { id: 'beta-backend', role: 'worker' },
+      { id: 'gamma-qa', role: 'reviewer' },
+      { id: 'delta-security', role: 'reviewer' },
+      { id: 'epsilon-infra', role: 'worker' },
+    ];
+
+    for (const ag of defaultAgents) {
+      try {
+        queries.addAgentToProject(projectId, ag.id, ag.role);
+      } catch (e) {}
+    }
+
+    // Cria sessão inicial de tarefa
+    try {
+      queries.createTaskSession(projectId, 'Canal Geral', 'Sessão principal de integração e planejamento');
+    } catch (e) {}
+
+    // Background task: generate context
     aiManager.generateInitialContext(name, description).then(context => {
-      queries.updateProjectContext((project as any).id as string, context);
+      queries.updateProjectContext(projectId, context);
     }).catch(e => console.error('Failed to generate initial context', e));
   }
 

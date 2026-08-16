@@ -16,9 +16,11 @@ export function initDb() {
   // Auto-migration
   try {
     db.exec('ALTER TABLE projects ADD COLUMN shared_context TEXT');
-  } catch (e) {
-    // Column already exists
-  }
+  } catch (e) {}
+
+  try {
+    db.exec('ALTER TABLE projects ADD COLUMN path TEXT');
+  } catch (e) {}
 
   try {
     db.exec(`
@@ -33,6 +35,25 @@ export function initDb() {
       );
       CREATE INDEX IF NOT EXISTS idx_task_sessions_project ON task_sessions(project_id, created_at);
     `);
+  } catch (e) {}
+
+  // Seed baseline agents if empty
+  try {
+    const agents = [
+      { id: 'rodrigo', name: 'Rodrigo (Engenheiro Humano)', type: 'human', description: 'Lead Developer & Tech Supervisor' },
+      { id: 'alpha-frontend', name: 'Alpha (Frontend)', type: 'ai', model: 'gemini-1.5-flash', description: 'Especialista em React, Tailwind e Design Tokens' },
+      { id: 'beta-backend', name: 'Beta (Backend)', type: 'ai', model: 'gemini-1.5-flash', description: 'Especialista em APIs REST, Express, SQLite e LangGraph' },
+      { id: 'gamma-qa', name: 'Gamma (QA)', type: 'ai', model: 'gemini-1.5-flash', description: 'Especialista em Garantia de Qualidade e Testes PBT' },
+      { id: 'delta-security', name: 'Delta (Security)', type: 'ai', model: 'gemini-1.5-flash', description: 'Auditor de Segurança e Red Team Adversarial' },
+      { id: 'epsilon-infra', name: 'Epsilon (Infra)', type: 'ai', model: 'gemini-1.5-flash', description: 'Especialista em DevOps, Docker, S3 e Automação' },
+    ];
+
+    for (const ag of agents) {
+      db.prepare(`
+        INSERT OR IGNORE INTO agents (id, name, type, model, description)
+        VALUES (?, ?, ?, ?, ?)
+      `).run(ag.id, ag.name, ag.type, ag.model || null, ag.description);
+    }
   } catch (e) {}
 
   console.log('Database initialized');

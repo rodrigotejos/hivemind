@@ -45,4 +45,5 @@ declare module 'lucide-react' {
   export const Layers: Icon;
   export const MessageSquare: Icon;
   export const Clock: Icon;
+  export const Folder: Icon;
 }

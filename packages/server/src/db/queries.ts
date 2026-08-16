@@ -15,9 +15,9 @@ export function updateProject(id: string, updates: Partial<{name: string, descri
   return getProject(id);
 }
 
-export function createProject(name: string, description?: string, sharedContext?: string) {
-  const stmt = db.prepare('INSERT INTO projects (name, description, shared_context) VALUES (?, ?, ?) RETURNING *');
-  return stmt.get(name, description || null, sharedContext || null);
+export function createProject(name: string, description?: string, sharedContext?: string, projectPath?: string) {
+  const stmt = db.prepare('INSERT INTO projects (name, description, shared_context, path) VALUES (?, ?, ?, ?) RETURNING *');
+  return stmt.get(name, description || null, sharedContext || null, projectPath || null);
 }
 
 export function updateProjectContext(id: string, context: string) {
