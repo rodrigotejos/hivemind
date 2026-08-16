@@ -118,3 +118,17 @@ export function markNotificationRead(id: string) {
 export function markAllNotificationsRead(agentId: string) {
   db.prepare('UPDATE notifications SET read = 1 WHERE agent_id = ?').run(agentId);
 }
+
+export function getProjectDecisions(projectId: string) {
+  return db.prepare('SELECT * FROM decisions WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
+}
+
+export function getProjectNotifications(projectId: string) {
+  return db.prepare(`
+    SELECT n.* 
+    FROM notifications n
+    JOIN messages m ON n.message_id = m.id
+    WHERE m.project_id = ?
+    ORDER BY n.created_at DESC
+  `).all(projectId);
+}

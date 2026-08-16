@@ -4,7 +4,7 @@
 - **Project Name**: Hivemind (AI-DLC Coordinator)
 - **Project Type**: Brownfield
 - **Start Date**: 2026-08-15T20:50:49-03:00
-- **Current Stage**: CONSTRUCTION - Unit 4: LangSmith Observability & Token Telemetry (`UOW-04`)
+- **Current Stage**: CONSTRUCTION - Unit 5: Project Auto-Setup & Cloud S3 Snapshot Resilience (`UOW-05`)
 
 ## Workspace State
 - **Existing Code**: Yes
