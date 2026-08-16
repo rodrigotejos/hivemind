@@ -139,9 +139,15 @@ export function getProjectNotifications(projectId: string) {
   `).all(projectId);
 }
 
-export function createTaskSession(projectId: string, title: string, goal?: string, model: string = 'gemini-1.5-flash') {
-  const stmt = db.prepare('INSERT INTO task_sessions (project_id, title, goal, model, status) VALUES (?, ?, ?, ?, ?) RETURNING *');
-  return stmt.get(projectId, title, goal || null, model || 'gemini-1.5-flash', 'active');
+export function createTaskSession(
+  projectId: string, 
+  title: string, 
+  goal?: string, 
+  model: string = 'auto',
+  reasoningLevel: string = 'medium'
+) {
+  const stmt = db.prepare('INSERT INTO task_sessions (project_id, title, goal, model, reasoning_level, status) VALUES (?, ?, ?, ?, ?, ?) RETURNING *');
+  return stmt.get(projectId, title, goal || null, model || 'auto', reasoningLevel || 'medium', 'active');
 }
 
 export function getProjectTaskSessions(projectId: string) {
@@ -152,11 +158,12 @@ export function getTaskSession(id: string) {
   return db.prepare('SELECT * FROM task_sessions WHERE id = ?').get(id);
 }
 
-export function updateTaskSession(id: string, updates: Partial<{ title: string; goal: string; model: string; status: string }>) {
+export function updateTaskSession(id: string, updates: Partial<{ title: string; goal: string; model: string; reasoning_level: string; status: string }>) {
   const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   const values = Object.values(updates);
   db.prepare(`UPDATE task_sessions SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values, id);
   return getTaskSession(id);
 }
+
 
 

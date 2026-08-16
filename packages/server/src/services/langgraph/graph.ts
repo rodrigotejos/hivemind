@@ -74,7 +74,8 @@ export class LangGraphOrchestrator {
     goal: string,
     maxTurns: number = 5,
     sessionId?: string,
-    model: string = 'gemini-1.5-flash'
+    model: string = 'auto',
+    reasoningLevel: 'off' | 'low' | 'medium' | 'high' = 'medium'
   ): Promise<AgentGraphStateType> {
     const threadId = sessionId ? `proj_${projectId}_sess_${sessionId}` : `proj_${projectId}_task_${taskId}`;
     const threadConfig = { configurable: { thread_id: threadId } };
@@ -85,6 +86,7 @@ export class LangGraphOrchestrator {
       taskId,
       goal,
       model,
+      reasoningLevel,
       messages: [{
         id: `init_${Date.now()}`,
         role: 'user',

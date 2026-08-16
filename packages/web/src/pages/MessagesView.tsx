@@ -36,7 +36,8 @@ export default function MessagesView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newGoal, setNewGoal] = useState('');
-  const [newModel, setNewModel] = useState('gemini-1.5-flash');
+  const [newModel, setNewModel] = useState('auto');
+  const [newReasoningLevel, setNewReasoningLevel] = useState('medium');
   
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -133,6 +134,7 @@ export default function MessagesView() {
           title: newTitle.trim(),
           goal: newGoal.trim(),
           model: newModel,
+          reasoningLevel: newReasoningLevel,
         }),
       });
       const data = await res.json();
@@ -140,7 +142,8 @@ export default function MessagesView() {
         setActiveSessionId(data.id);
         setNewTitle('');
         setNewGoal('');
-        setNewModel('gemini-1.5-flash');
+        setNewModel('auto');
+        setNewReasoningLevel('medium');
         setIsModalOpen(false);
       }
     } catch (err) {
@@ -158,6 +161,19 @@ export default function MessagesView() {
       });
     } catch (err) {
       console.error('Falha ao atualizar modelo da sessão:', err);
+    }
+  };
+
+  const handleReasoningChanged = async (newChosenReasoning: string) => {
+    if (!activeSessionId || activeSessionId === 'general') return;
+    try {
+      await fetch(`${API_URL}/api/projects/${id}/sessions/${activeSessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ reasoning_level: newChosenReasoning }),
+      });
+    } catch (err) {
+      console.error('Falha ao atualizar reasoning da sessão:', err);
     }
   };
 
@@ -206,13 +222,18 @@ export default function MessagesView() {
             </div>
             <div>
               <h1 className="font-bold text-lg text-white leading-tight">Live Terminal & Task Streams</h1>
-              <div className="flex items-center gap-2 mt-0.5">
+              <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                 <p className="text-xs text-zinc-400 font-mono">
                   {currentSession ? `Sessão: ${currentSession.title}` : 'Canal Geral de Colaboração'}
                 </p>
                 {currentSession?.model && (
                   <span className="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded font-mono flex items-center gap-1">
                     <Cpu size={10} /> {currentSession.model}
+                  </span>
+                )}
+                {currentSession?.reasoning_level && (
+                  <span className="text-[10px] px-2 py-0.5 bg-amber-500/10 text-amber-300 border border-amber-500/20 rounded font-mono flex items-center gap-1">
+                    <Sparkles size={10} /> {currentSession.reasoning_level}
                   </span>
                 )}
               </div>
@@ -276,11 +297,10 @@ export default function MessagesView() {
                     {s.status}
                   </span>
                 </div>
-                {s.model && (
-                  <div className="text-[10px] text-indigo-400/80 font-mono truncate">
-                    🤖 {s.model}
-                  </div>
-                )}
+                <div className="flex items-center gap-2 text-[10px] text-zinc-400 font-mono">
+                  <span>🤖 {s.model || 'auto'}</span>
+                  {s.reasoning_level && <span className="text-amber-400/80">✨ {s.reasoning_level}</span>}
+                </div>
                 {s.goal && <div className="text-[11px] text-zinc-500 truncate">{s.goal}</div>}
               </button>
             ))}
@@ -303,10 +323,12 @@ export default function MessagesView() {
               sessionId={activeSessionId}
               sessionTitle={currentSession ? currentSession.title : 'Canal Geral'}
               initialGoal={currentSession?.goal || ''}
-              initialModel={currentSession?.model || 'gemini-1.5-flash'}
+              initialModel={currentSession?.model || 'auto'}
+              initialReasoningLevel={currentSession?.reasoning_level || 'medium'}
               compact={true}
               onTaskStarted={loadMessages}
               onModelChanged={handleModelChanged}
+              onReasoningChanged={handleReasoningChanged}
             />
           </div>
 
@@ -414,7 +436,7 @@ export default function MessagesView() {
         </div>
       </div>
 
-      {/* Modal: Criar Nova Sessão de Tarefa com Seletor de Modelo */}
+      {/* Modal: Criar Nova Sessão de Tarefa com Matriz de Modelos e Nível de Raciocínio */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -445,18 +467,37 @@ export default function MessagesView() {
                 />
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Modelo Coordenador de IA</label>
-                <select
-                  value={newModel}
-                  onChange={(e) => setNewModel(e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
-                >
-                  <option value="gemini-1.5-flash">⚡ Gemini 1.5 Flash (Rápido & Econômico)</option>
-                  <option value="gemini-1.5-pro">🧠 Gemini 1.5 Pro (Raciocínio Profundo & Arquitetura)</option>
-                  <option value="gemini-2.0-flash">🚀 Gemini 2.0 Flash (Próxima Geração)</option>
-                  <option value="claude-3-5-sonnet">🤖 Claude 3.5 Sonnet (Antigravity Bridge)</option>
-                </select>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Modelo Coordenador</label>
+                  <select
+                    value={newModel}
+                    onChange={(e) => setNewModel(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="auto">✨ Auto (Adaptativo)</option>
+                    <option value="gemini-3.5-flash-lite">⚡ 3.5 Flash Lite</option>
+                    <option value="gemini-3.5-flash">⚡ 3.5 Flash</option>
+                    <option value="gemini-3.6-flash">🎯 3.6 Flash</option>
+                    <option value="gemini-3.7-flash">🔥 3.7 Flash</option>
+                    <option value="gemini-3.1-pro">🧠 3.1 Pro</option>
+                    <option value="claude-3-5-sonnet">🤖 Claude 3.5 Sonnet</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-medium text-zinc-300 mb-1">Nível de Raciocínio</label>
+                  <select
+                    value={newReasoningLevel}
+                    onChange={(e) => setNewReasoningLevel(e.target.value)}
+                    className="w-full px-3 py-2 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                  >
+                    <option value="off">Off (Instantâneo)</option>
+                    <option value="low">Low (~2k tokens)</option>
+                    <option value="medium">Medium (~8k tokens)</option>
+                    <option value="high">High (~32k tokens)</option>
+                  </select>
+                </div>
               </div>
 
               <div>

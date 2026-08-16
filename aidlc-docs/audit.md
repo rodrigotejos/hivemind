@@ -88,5 +88,11 @@
 **AI Response**: "Initiating AI-DLC Construction for Per-Session Model Selection. Implementing dynamic model selection (Gemini 1.5 Flash, Gemini 1.5 Pro, Gemini 2.0 Flash, Claude 3.5 Sonnet) per task session, database persistence in task_sessions, and dynamic model invocation in LangGraph and AI Manager."
 **Context**: New Feature Construction - Dynamic Model Selection for Coordination.
 
+## Model Matrix & Reasoning Level Selection with Auto-Adaptive Mode
+**Timestamp**: 2026-08-15T22:35:00-03:00
+**User Input**: "vamso usar o 3.5 flash lite, 3.5 flash 3.6 flash 3.7 flsh e 3.1 pro e esocalhe ro nivel de raciocinio e um modo auto para mudar entre eles."
+**AI Response**: "Initiating AI-DLC Construction for Gemini Model Matrix (3.5 Flash Lite, 3.5 Flash, 3.6 Flash, 3.7 Flash, 3.1 Pro), Reasoning Levels (off, low, medium, high), and Auto-Adaptive Mode scaling coordinator model based on complexity."
+**Context**: New Feature Construction - Model Matrix, Reasoning Budget & Auto Mode.
+
 ---
 

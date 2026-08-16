@@ -7,7 +7,7 @@ export const orchestratorRouter = Router();
 // Iniciar tarefa autônoma
 orchestratorRouter.post('/:projectId/graph/start', async (req: Request, res: Response): Promise<void> => {
   const { projectId } = req.params;
-  const { taskId, goal, maxTurns, sessionId, model } = req.body;
+  const { taskId, goal, maxTurns, sessionId, model, reasoningLevel } = req.body;
 
   if (!goal) {
     res.status(400).json({ error: 'goal é obrigatório' });
@@ -22,7 +22,8 @@ orchestratorRouter.post('/:projectId/graph/start', async (req: Request, res: Res
       goal,
       maxTurns || 5,
       sessionId,
-      model || 'gemini-1.5-flash'
+      model || 'auto',
+      reasoningLevel || 'medium'
     );
 
     // Emite status para a sala do projeto no Socket.IO

@@ -4,37 +4,116 @@ import * as queries from '../db/queries';
 
 const modelCache = new Map<string, ChatGoogleGenerativeAI>();
 
-export function getModel(modelName: string = 'gemini-1.5-flash'): ChatGoogleGenerativeAI | null {
+export type ReasoningLevel = 'off' | 'low' | 'medium' | 'high';
+
+export interface ModelResolution {
+  targetModel: string;
+  actualModelName: string;
+  reasoningLevel: ReasoningLevel;
+  thinkingBudget: number;
+}
+
+export function resolveModelConfig(
+  requestedModel: string = 'auto', 
+  promptContent: string = '',
+  reasoningLevel: ReasoningLevel = 'medium'
+): ModelResolution {
+  const contentLower = promptContent.toLowerCase();
+  
+  let targetModel = requestedModel;
+  let resolvedReasoning = reasoningLevel;
+
+  // Modo AUTO: Escala dinamicamente com base na complexidade detectada
+  if (!requestedModel || requestedModel === 'auto') {
+    const isHighComplexity = 
+      contentLower.includes('arquitetura') ||
+      contentLower.includes('segurança') ||
+      contentLower.includes('vulnerabilidade') ||
+      contentLower.includes('blocker') ||
+      contentLower.includes('refactor') ||
+      contentLower.includes('pbt') ||
+      contentLower.includes('conflito') ||
+      contentLower.includes('migration');
+
+    const isLightTask = 
+      contentLower.includes('status') ||
+      contentLower.includes('ping') ||
+      contentLower.includes('resumo') ||
+      contentLower.length < 50;
+
+    if (isHighComplexity) {
+      targetModel = 'gemini-3.7-flash';
+      resolvedReasoning = 'high';
+    } else if (isLightTask) {
+      targetModel = 'gemini-3.5-flash-lite';
+      resolvedReasoning = 'low';
+    } else {
+      targetModel = 'gemini-3.5-flash';
+      resolvedReasoning = 'medium';
+    }
+  }
+
+  // Mapeamento normalizado para nomes de modelo da API do Google
+  let actualModelName = 'gemini-1.5-flash';
+  if (targetModel.includes('3.1-pro') || targetModel.includes('pro')) {
+    actualModelName = 'gemini-1.5-pro';
+  } else if (targetModel.includes('3.7-flash') || targetModel.includes('2.0')) {
+    actualModelName = 'gemini-2.0-flash';
+  } else if (targetModel.includes('3.6-flash')) {
+    actualModelName = 'gemini-2.0-flash';
+  } else if (targetModel.includes('lite') || targetModel.includes('flash-lite')) {
+    actualModelName = 'gemini-1.5-flash';
+  } else {
+    actualModelName = 'gemini-1.5-flash';
+  }
+
+  // Thinking Budget por Reasoning Level
+  const thinkingBudget = 
+    resolvedReasoning === 'off' ? 0 :
+    resolvedReasoning === 'low' ? 2048 :
+    resolvedReasoning === 'high' ? 32768 :
+    8192; // medium default
+
+  return {
+    targetModel,
+    actualModelName,
+    reasoningLevel: resolvedReasoning,
+    thinkingBudget,
+  };
+}
+
+export function getModel(
+  modelName: string = 'auto', 
+  promptContent: string = '', 
+  reasoningLevel: ReasoningLevel = 'medium'
+): ChatGoogleGenerativeAI | null {
   const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey === 'your_gemini_key_here') {
     return null;
   }
 
-  // Normaliza aliases
-  const targetModel = modelName.includes('pro') ? 'gemini-1.5-pro' :
-                      modelName.includes('2.0') ? 'gemini-2.0-flash' :
-                      'gemini-1.5-flash';
+  const { actualModelName } = resolveModelConfig(modelName, promptContent, reasoningLevel);
 
-  if (!modelCache.has(targetModel)) {
+  if (!modelCache.has(actualModelName)) {
     try {
       const instance = new ChatGoogleGenerativeAI({
-        modelName: targetModel,
+        modelName: actualModelName,
         apiKey,
       });
-      modelCache.set(targetModel, instance);
+      modelCache.set(actualModelName, instance);
     } catch (e) {
-      console.warn(`AI Manager: Falha ao instanciar modelo ${targetModel}:`, e);
+      console.warn(`AI Manager: Falha ao instanciar modelo ${actualModelName}:`, e);
       return null;
     }
   }
 
-  return modelCache.get(targetModel) || null;
+  return modelCache.get(actualModelName) || null;
 }
 
-export async function summarizeProject(projectId: string, modelName?: string): Promise<string> {
+export async function summarizeProject(projectId: string, modelName?: string, reasoningLevel?: ReasoningLevel): Promise<string> {
   const project = queries.getProject(projectId);
   const messages = queries.getProjectMessages(projectId);
-  const model = getModel(modelName);
+  const model = getModel(modelName, '', reasoningLevel);
 
   if (!model) {
     return 'Resumo simulado: O projeto está em andamento. Foram trocadas ' + messages.length + ' mensagens.';
@@ -52,7 +131,7 @@ export async function summarizeProject(projectId: string, modelName?: string): P
     const chain = prompt.pipe(model as any);
     const result = await chain.invoke({
       projectName: project ? (project as any).name : projectId,
-      messages: JSON.stringify(messages.slice(-20)), // limit to last 20 messages for context
+      messages: JSON.stringify(messages.slice(-20)),
     });
     return (result as any).content as string;
   } catch (err) {
@@ -64,20 +143,25 @@ export async function summarizeProject(projectId: string, modelName?: string): P
 export async function analyzeMessagePriority(
   messageContent: string, 
   projectContext: string,
-  modelName?: string
+  modelName?: string,
+  reasoningLevel?: ReasoningLevel
 ): Promise<{
   priority: 'low' | 'normal' | 'high' | 'critical',
   needsHuman: boolean,
-  conflictRisk: boolean
+  conflictRisk: boolean,
+  resolvedModel?: string
 }> {
-  const model = getModel(modelName);
+  const config = resolveModelConfig(modelName, messageContent, reasoningLevel);
+  const model = getModel(config.targetModel, messageContent, config.reasoningLevel);
+
   if (!model) {
     const lc = messageContent.toLowerCase();
     const isCritical = lc.includes('block') || lc.includes('erro') || lc.includes('ajuda');
     return {
       priority: isCritical ? 'critical' : 'normal',
       needsHuman: isCritical,
-      conflictRisk: false
+      conflictRisk: false,
+      resolvedModel: config.targetModel,
     };
   }
 
@@ -101,15 +185,16 @@ export async function analyzeMessagePriority(
     });
     const text = (result as any).content as string;
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    return JSON.parse(jsonStr);
+    const parsed = JSON.parse(jsonStr);
+    return { ...parsed, resolvedModel: config.targetModel };
   } catch (e) {
     console.error('Failed to parse AI response', e);
-    return { priority: 'normal', needsHuman: false, conflictRisk: false };
+    return { priority: 'normal', needsHuman: false, conflictRisk: false, resolvedModel: config.targetModel };
   }
 }
 
 export async function generateInitialContext(projectName: string, description: string, modelName?: string): Promise<string> {
-  const model = getModel(modelName);
+  const model = getModel(modelName, description);
   if (!model) {
     return `# Contexto: ${projectName}\n\n${description || 'Projeto sem descrição.'}\n\n*Nota: Aguardando análise real do código.*`;
   }
@@ -138,7 +223,7 @@ export async function generateInitialContext(projectName: string, description: s
 }
 
 export async function expandContextWithRealData(currentContext: string, analysisData: string, modelName?: string): Promise<string> {
-  const model = getModel(modelName);
+  const model = getModel(modelName, analysisData);
   if (!model) return currentContext + '\n\n### Análise Real Adicionada:\n' + analysisData;
 
   const prompt = PromptTemplate.fromTemplate(`
@@ -166,7 +251,7 @@ export async function expandContextWithRealData(currentContext: string, analysis
 }
 
 export async function updateSharedContext(currentContext: string, newUpdates: string, modelName?: string): Promise<string> {
-  const model = getModel(modelName);
+  const model = getModel(modelName, newUpdates);
   if (!model) return currentContext + '\n\n### Novos Updates:\n' + newUpdates;
 
   const prompt = PromptTemplate.fromTemplate(`
@@ -190,6 +275,6 @@ export async function updateSharedContext(currentContext: string, newUpdates: st
     return (result as any).content as string;
   } catch (err) {
     console.error('AI Update Context Error:', err);
-    return currentContext; // Se falhar, mantém o antigo
+    return currentContext;
   }
 }

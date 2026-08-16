@@ -18,7 +18,11 @@ export const AgentGraphAnnotation = Annotation.Root({
   goal: Annotation<string>(),
   model: Annotation<string | undefined>({
     reducer: (current, update) => update ?? current,
-    default: () => 'gemini-1.5-flash',
+    default: () => 'auto',
+  }),
+  reasoningLevel: Annotation<'off' | 'low' | 'medium' | 'high' | undefined>({
+    reducer: (current, update) => update ?? current,
+    default: () => 'medium',
   }),
   messages: Annotation<GraphMessage[]>({
     reducer: (current, update) => current.concat(update),
