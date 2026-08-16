@@ -15,10 +15,10 @@ sessionsRouter.get('/projects/:projectId/sessions', (req: Request, res: Response
   }
 });
 
-// Criar nova sessão de tarefa isolada
+// Criar nova sessão de tarefa isolada com modelo coordenador
 sessionsRouter.post('/projects/:projectId/sessions', (req: Request, res: Response): void => {
   const { projectId } = req.params;
-  const { title, goal } = req.body;
+  const { title, goal, model } = req.body;
 
   if (!title) {
     res.status(400).json({ error: 'title é obrigatório' });
@@ -26,7 +26,7 @@ sessionsRouter.post('/projects/:projectId/sessions', (req: Request, res: Respons
   }
 
   try {
-    const session = queries.createTaskSession(projectId, title, goal);
+    const session = queries.createTaskSession(projectId, title, goal, model || 'gemini-1.5-flash');
     io.to(`project_${projectId}`).emit('session_created', session);
     res.status(201).json(session);
   } catch (error: any) {
@@ -49,7 +49,7 @@ sessionsRouter.get('/projects/:projectId/sessions/:sessionId', (req: Request, re
   }
 });
 
-// Atualizar status ou dados da sessão
+// Atualizar status, objetivo ou modelo da sessão
 sessionsRouter.patch('/projects/:projectId/sessions/:sessionId', (req: Request, res: Response): void => {
   const { projectId, sessionId } = req.params;
   const updates = req.body;

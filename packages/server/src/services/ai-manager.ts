@@ -2,22 +2,39 @@ import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { PromptTemplate } from 'langchain/prompts';
 import * as queries from '../db/queries';
 
-let model: ChatGoogleGenerativeAI | null = null;
+const modelCache = new Map<string, ChatGoogleGenerativeAI>();
 
-try {
-  if (process.env.GOOGLE_API_KEY && process.env.GOOGLE_API_KEY !== 'your_gemini_key_here') {
-    model = new ChatGoogleGenerativeAI({
-      modelName: 'gemini-1.5-flash',
-      apiKey: process.env.GOOGLE_API_KEY,
-    });
+export function getModel(modelName: string = 'gemini-1.5-flash'): ChatGoogleGenerativeAI | null {
+  const apiKey = process.env.GOOGLE_API_KEY || process.env.GEMINI_API_KEY;
+  if (!apiKey || apiKey === 'your_gemini_key_here') {
+    return null;
   }
-} catch (e) {
-  console.warn('AI Manager: Google API Key not configured correctly.');
+
+  // Normaliza aliases
+  const targetModel = modelName.includes('pro') ? 'gemini-1.5-pro' :
+                      modelName.includes('2.0') ? 'gemini-2.0-flash' :
+                      'gemini-1.5-flash';
+
+  if (!modelCache.has(targetModel)) {
+    try {
+      const instance = new ChatGoogleGenerativeAI({
+        modelName: targetModel,
+        apiKey,
+      });
+      modelCache.set(targetModel, instance);
+    } catch (e) {
+      console.warn(`AI Manager: Falha ao instanciar modelo ${targetModel}:`, e);
+      return null;
+    }
+  }
+
+  return modelCache.get(targetModel) || null;
 }
 
-export async function summarizeProject(projectId: string): Promise<string> {
+export async function summarizeProject(projectId: string, modelName?: string): Promise<string> {
   const project = queries.getProject(projectId);
   const messages = queries.getProjectMessages(projectId);
+  const model = getModel(modelName);
 
   if (!model) {
     return 'Resumo simulado: O projeto está em andamento. Foram trocadas ' + messages.length + ' mensagens.';
@@ -44,13 +61,17 @@ export async function summarizeProject(projectId: string): Promise<string> {
   }
 }
 
-export async function analyzeMessagePriority(messageContent: string, projectContext: string): Promise<{
+export async function analyzeMessagePriority(
+  messageContent: string, 
+  projectContext: string,
+  modelName?: string
+): Promise<{
   priority: 'low' | 'normal' | 'high' | 'critical',
   needsHuman: boolean,
   conflictRisk: boolean
 }> {
+  const model = getModel(modelName);
   if (!model) {
-    // Basic heuristics for mock
     const lc = messageContent.toLowerCase();
     const isCritical = lc.includes('block') || lc.includes('erro') || lc.includes('ajuda');
     return {
@@ -87,7 +108,8 @@ export async function analyzeMessagePriority(messageContent: string, projectCont
   }
 }
 
-export async function generateInitialContext(projectName: string, description: string): Promise<string> {
+export async function generateInitialContext(projectName: string, description: string, modelName?: string): Promise<string> {
+  const model = getModel(modelName);
   if (!model) {
     return `# Contexto: ${projectName}\n\n${description || 'Projeto sem descrição.'}\n\n*Nota: Aguardando análise real do código.*`;
   }
@@ -115,7 +137,8 @@ export async function generateInitialContext(projectName: string, description: s
   }
 }
 
-export async function expandContextWithRealData(currentContext: string, analysisData: string): Promise<string> {
+export async function expandContextWithRealData(currentContext: string, analysisData: string, modelName?: string): Promise<string> {
+  const model = getModel(modelName);
   if (!model) return currentContext + '\n\n### Análise Real Adicionada:\n' + analysisData;
 
   const prompt = PromptTemplate.fromTemplate(`
@@ -142,7 +165,8 @@ export async function expandContextWithRealData(currentContext: string, analysis
   }
 }
 
-export async function updateSharedContext(currentContext: string, newUpdates: string): Promise<string> {
+export async function updateSharedContext(currentContext: string, newUpdates: string, modelName?: string): Promise<string> {
+  const model = getModel(modelName);
   if (!model) return currentContext + '\n\n### Novos Updates:\n' + newUpdates;
 
   const prompt = PromptTemplate.fromTemplate(`

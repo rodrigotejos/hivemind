@@ -82,5 +82,11 @@
 **AI Response**: "Initiating AI-DLC Construction for Task Sessions & Context Isolation Feature. Implementing session-scoped message streams, multi-task LangGraph state machines, integrated in-chat Cockpit controller, and session switching UI with shared project technical context."
 **Context**: New Feature Construction - Task Sessions, Context Isolation & In-Chat Cockpit Integration.
 
+## Per-Session Coordinator Model Selection Feature Request
+**Timestamp**: 2026-08-15T22:29:50-03:00
+**User Input**: "vamos la entao. quero que apra cadao area de caht. eu posso esoclher o modle que vai ser uaso para corodenar. usnaod o IA-DLC. vamo implanar"
+**AI Response**: "Initiating AI-DLC Construction for Per-Session Model Selection. Implementing dynamic model selection (Gemini 1.5 Flash, Gemini 1.5 Pro, Gemini 2.0 Flash, Claude 3.5 Sonnet) per task session, database persistence in task_sessions, and dynamic model invocation in LangGraph and AI Manager."
+**Context**: New Feature Construction - Dynamic Model Selection for Coordination.
+
 ---
 

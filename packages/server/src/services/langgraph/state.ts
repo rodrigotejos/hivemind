@@ -16,6 +16,10 @@ export const AgentGraphAnnotation = Annotation.Root({
   sessionId: Annotation<string | undefined>(),
   taskId: Annotation<string>(),
   goal: Annotation<string>(),
+  model: Annotation<string | undefined>({
+    reducer: (current, update) => update ?? current,
+    default: () => 'gemini-1.5-flash',
+  }),
   messages: Annotation<GraphMessage[]>({
     reducer: (current, update) => current.concat(update),
     default: () => [],

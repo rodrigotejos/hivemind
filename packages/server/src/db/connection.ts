@@ -29,12 +29,17 @@ export function initDb() {
         project_id TEXT NOT NULL REFERENCES projects(id),
         title TEXT NOT NULL,
         goal TEXT,
+        model TEXT DEFAULT 'gemini-1.5-flash',
         status TEXT DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
       );
       CREATE INDEX IF NOT EXISTS idx_task_sessions_project ON task_sessions(project_id, created_at);
     `);
+  } catch (e) {}
+
+  try {
+    db.exec("ALTER TABLE task_sessions ADD COLUMN model TEXT DEFAULT 'gemini-1.5-flash'");
   } catch (e) {}
 
   // Seed baseline agents if empty

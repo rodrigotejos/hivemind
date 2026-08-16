@@ -11,7 +11,8 @@ import {
   Sparkles, 
   Plus, 
   Layers, 
-  MessageSquare
+  MessageSquare,
+  Cpu
 } from 'lucide-react';
 import MessageBubble from '../components/MessageBubble';
 import BlockerAlert from '../components/BlockerAlert';
@@ -30,9 +31,13 @@ export default function MessagesView() {
   const [, setSocket] = useState<Socket | null>(null);
   const [input, setInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<any>(null);
+  
+  // Modal de Criação de Tarefa
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newGoal, setNewGoal] = useState('');
+  const [newModel, setNewModel] = useState('gemini-1.5-flash');
+  
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Carrega Projeto, Agentes e Sessões
@@ -127,6 +132,7 @@ export default function MessagesView() {
         body: JSON.stringify({
           title: newTitle.trim(),
           goal: newGoal.trim(),
+          model: newModel,
         }),
       });
       const data = await res.json();
@@ -134,10 +140,24 @@ export default function MessagesView() {
         setActiveSessionId(data.id);
         setNewTitle('');
         setNewGoal('');
+        setNewModel('gemini-1.5-flash');
         setIsModalOpen(false);
       }
     } catch (err) {
       console.error('Falha ao criar sessão:', err);
+    }
+  };
+
+  const handleModelChanged = async (newChosenModel: string) => {
+    if (!activeSessionId || activeSessionId === 'general') return;
+    try {
+      await fetch(`${API_URL}/api/projects/${id}/sessions/${activeSessionId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: newChosenModel }),
+      });
+    } catch (err) {
+      console.error('Falha ao atualizar modelo da sessão:', err);
     }
   };
 
@@ -186,9 +206,16 @@ export default function MessagesView() {
             </div>
             <div>
               <h1 className="font-bold text-lg text-white leading-tight">Live Terminal & Task Streams</h1>
-              <p className="text-xs text-zinc-500 font-mono">
-                {currentSession ? `Sessão: ${currentSession.title}` : 'Canal Geral de Colaboração'}
-              </p>
+              <div className="flex items-center gap-2 mt-0.5">
+                <p className="text-xs text-zinc-400 font-mono">
+                  {currentSession ? `Sessão: ${currentSession.title}` : 'Canal Geral de Colaboração'}
+                </p>
+                {currentSession?.model && (
+                  <span className="text-[10px] px-2 py-0.5 bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded font-mono flex items-center gap-1">
+                    <Cpu size={10} /> {currentSession.model}
+                  </span>
+                )}
+              </div>
             </div>
           </div>
         </div>
@@ -249,6 +276,11 @@ export default function MessagesView() {
                     {s.status}
                   </span>
                 </div>
+                {s.model && (
+                  <div className="text-[10px] text-indigo-400/80 font-mono truncate">
+                    🤖 {s.model}
+                  </div>
+                )}
                 {s.goal && <div className="text-[11px] text-zinc-500 truncate">{s.goal}</div>}
               </button>
             ))}
@@ -271,8 +303,10 @@ export default function MessagesView() {
               sessionId={activeSessionId}
               sessionTitle={currentSession ? currentSession.title : 'Canal Geral'}
               initialGoal={currentSession?.goal || ''}
+              initialModel={currentSession?.model || 'gemini-1.5-flash'}
               compact={true}
               onTaskStarted={loadMessages}
+              onModelChanged={handleModelChanged}
             />
           </div>
 
@@ -380,7 +414,7 @@ export default function MessagesView() {
         </div>
       </div>
 
-      {/* Modal: Criar Nova Sessão de Tarefa */}
+      {/* Modal: Criar Nova Sessão de Tarefa com Seletor de Modelo */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-zinc-900 border border-zinc-800 rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
@@ -400,7 +434,7 @@ export default function MessagesView() {
 
             <form onSubmit={handleCreateSession} className="space-y-4">
               <div>
-                <label className="block text-xs font-medium text-zinc-300 mb-1">Título da Tarefa</label>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Título da Tarefa *</label>
                 <input
                   type="text"
                   value={newTitle}
@@ -409,6 +443,20 @@ export default function MessagesView() {
                   required
                   className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-medium text-zinc-300 mb-1">Modelo Coordenador de IA</label>
+                <select
+                  value={newModel}
+                  onChange={(e) => setNewModel(e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-zinc-950 border border-zinc-800 rounded-xl text-xs text-white focus:outline-none focus:border-indigo-500"
+                >
+                  <option value="gemini-1.5-flash">⚡ Gemini 1.5 Flash (Rápido & Econômico)</option>
+                  <option value="gemini-1.5-pro">🧠 Gemini 1.5 Pro (Raciocínio Profundo & Arquitetura)</option>
+                  <option value="gemini-2.0-flash">🚀 Gemini 2.0 Flash (Próxima Geração)</option>
+                  <option value="claude-3-5-sonnet">🤖 Claude 3.5 Sonnet (Antigravity Bridge)</option>
+                </select>
               </div>
 
               <div>

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, AlertTriangle, ShieldCheck, CloudUpload, Activity, Coins, CheckCircle, RefreshCw } from 'lucide-react';
+import { Play, AlertTriangle, ShieldCheck, CloudUpload, Activity, Coins, CheckCircle, RefreshCw, Cpu } from 'lucide-react';
 
 interface CockpitPanelProps {
   projectId: string;
@@ -7,8 +7,10 @@ interface CockpitPanelProps {
   sessionId?: string;
   sessionTitle?: string;
   initialGoal?: string;
+  initialModel?: string;
   compact?: boolean;
   onTaskStarted?: () => void;
+  onModelChanged?: (newModel: string) => void;
 }
 
 export default function CockpitPanel({
@@ -17,11 +19,14 @@ export default function CockpitPanel({
   sessionId,
   sessionTitle,
   initialGoal,
+  initialModel = 'gemini-1.5-flash',
   compact = false,
   onTaskStarted,
+  onModelChanged,
 }: CockpitPanelProps) {
   const [graphState, setGraphState] = useState<any>(null);
   const [goalInput, setGoalInput] = useState(initialGoal || '');
+  const [selectedModel, setSelectedModel] = useState(initialModel);
   const [maxTurns, setMaxTurns] = useState(5);
   const [isLoading, setIsLoading] = useState(false);
   const [telemetry, setTelemetry] = useState<any>(null);
@@ -32,7 +37,10 @@ export default function CockpitPanel({
     if (initialGoal) {
       setGoalInput(initialGoal);
     }
-  }, [initialGoal, sessionId]);
+    if (initialModel) {
+      setSelectedModel(initialModel);
+    }
+  }, [initialGoal, initialModel, sessionId]);
 
   const fetchGraphState = () => {
     const url = sessionId
@@ -78,6 +86,7 @@ export default function CockpitPanel({
           goal: goalInput,
           maxTurns,
           sessionId: sessionId === 'general' ? undefined : sessionId,
+          model: selectedModel,
         }),
       });
       const data = await res.json();
@@ -141,7 +150,7 @@ export default function CockpitPanel({
 
   return (
     <div className="space-y-4">
-      {/* 1. Bar de Telemetria e Governança (Modo Compacto vs Expandido) */}
+      {/* 1. Bar de Telemetria e Governança (Modo Expandido) */}
       {!compact && (
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
@@ -237,12 +246,12 @@ export default function CockpitPanel({
         </div>
       )}
 
-      {/* 3. Lançador de Tarefas Autônomas Integrado */}
+      {/* 3. Lançador de Tarefas Autônomas Integrado com Seletor de Modelos */}
       <div className={`bg-zinc-950/80 border border-zinc-800/90 rounded-2xl ${compact ? 'p-4' : 'p-6'}`}>
-        <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
           <h3 className="text-xs md:text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Play size={14} className="text-indigo-400" />
-            <span>Colaboração Autônoma (LangGraph)</span>
+            <span>Coordenação Multi-Agente</span>
             {sessionTitle && (
               <span className="text-xs normal-case font-normal text-indigo-300 bg-indigo-500/10 px-2 py-0.5 rounded-md border border-indigo-500/20">
                 Sessão: {sessionTitle}
@@ -264,19 +273,40 @@ export default function CockpitPanel({
             type="text"
             value={goalInput}
             onChange={(e) => setGoalInput(e.target.value)}
-            placeholder={sessionId && sessionId !== 'general' ? `Objetivo para esta sessão "${sessionTitle || 'Tarefa'}"...` : "Ex: Criar nova tela seguindo o Figma, endpoints de backend e testes no QA..."}
+            placeholder={sessionId && sessionId !== 'general' ? `Objetivo para a sessão "${sessionTitle || 'Tarefa'}"...` : "Ex: Criar nova tela seguindo o Figma, endpoints de backend e testes no QA..."}
             className="flex-1 px-3.5 py-2.5 bg-zinc-900 border border-zinc-700/80 rounded-xl text-white text-xs md:text-sm focus:outline-none focus:border-indigo-500"
           />
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap sm:flex-nowrap">
+            {/* Seletor de Modelo Coordenador */}
+            <div className="flex items-center gap-1.5 bg-zinc-900 border border-zinc-700/80 rounded-xl px-2 py-1">
+              <Cpu size={14} className="text-indigo-400 shrink-0" />
+              <select
+                value={selectedModel}
+                onChange={(e) => {
+                  const val = e.target.value;
+                  setSelectedModel(val);
+                  if (onModelChanged) onModelChanged(val);
+                }}
+                className="bg-transparent text-zinc-200 text-xs focus:outline-none cursor-pointer pr-1"
+                title="Escolha o modelo de IA que coordenará esta tarefa"
+              >
+                <option value="gemini-1.5-flash" className="bg-zinc-900 text-white">⚡ Gemini 1.5 Flash (Rápido)</option>
+                <option value="gemini-1.5-pro" className="bg-zinc-900 text-white">🧠 Gemini 1.5 Pro (Raciocínio)</option>
+                <option value="gemini-2.0-flash" className="bg-zinc-900 text-white">🚀 Gemini 2.0 Flash (Next-Gen)</option>
+                <option value="claude-3-5-sonnet" className="bg-zinc-900 text-white">🤖 Claude 3.5 Sonnet (Bridge)</option>
+              </select>
+            </div>
+
             <select
               value={maxTurns}
               onChange={(e) => setMaxTurns(Number(e.target.value))}
               className="px-2.5 py-2.5 bg-zinc-900 border border-zinc-700 rounded-xl text-zinc-300 text-xs focus:outline-none"
             >
-              <option value={3}>Max 3t</option>
-              <option value={5}>Max 5t</option>
-              <option value={10}>Max 10t</option>
+              <option value={3}>3 turnos</option>
+              <option value={5}>5 turnos</option>
+              <option value={10}>10 turnos</option>
             </select>
+            
             <button
               onClick={handleStartTask}
               disabled={isLoading || !goalInput.trim()}
