@@ -89,7 +89,7 @@ export class BridgeDaemonService {
       agentId: request.agentId,
       agentRole: request.agentRole,
       status: 'streaming',
-      initialText: `Iniciando análise técnica no repositório...`,
+      initialText: `🔍 Inspecionando repositório e lendo arquivos...`,
     });
 
     try {
@@ -156,6 +156,8 @@ export class BridgeDaemonService {
       const timeoutMs = request.timeoutMs || 300000; // 5 min timeout
       let outputBuffer = '';
       let isSettled = false;
+      let hasReceivedRealOutput = false;
+      const progressTimers: NodeJS.Timeout[] = [];
 
       const workingDir = request.cwd || process.cwd();
 
@@ -180,6 +182,50 @@ export class BridgeDaemonService {
       const sanitizedEnv = { ...process.env };
       delete sanitizedEnv.NODE_DEBUG;
 
+      // Heartbeat de feedback visual progressivo antes do stdout do agy
+      progressTimers.push(setTimeout(() => {
+        if (!hasReceivedRealOutput && !isSettled) {
+          io.to(`project_${request.projectId}`).emit('agent_stream_chunk', {
+            messageId: streamMsgId,
+            projectId: request.projectId,
+            threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+            agentId: request.agentId,
+            chunk: '',
+            fullText: `🔍 Inspecionando repositório e lendo arquivos...\n⚡ Mapeando módulos, rotas e dependências...`,
+          });
+        }
+      }, 2500));
+
+      progressTimers.push(setTimeout(() => {
+        if (!hasReceivedRealOutput && !isSettled) {
+          io.to(`project_${request.projectId}`).emit('agent_stream_chunk', {
+            messageId: streamMsgId,
+            projectId: request.projectId,
+            threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+            agentId: request.agentId,
+            chunk: '',
+            fullText: `🔍 Inspecionando repositório e lendo arquivos...\n⚡ Mapeando módulos, rotas e dependências...\n🛠️ Executando análise técnica no workspace...`,
+          });
+        }
+      }, 7000));
+
+      progressTimers.push(setTimeout(() => {
+        if (!hasReceivedRealOutput && !isSettled) {
+          io.to(`project_${request.projectId}`).emit('agent_stream_chunk', {
+            messageId: streamMsgId,
+            projectId: request.projectId,
+            threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+            agentId: request.agentId,
+            chunk: '',
+            fullText: `🔍 Inspecionando repositório e lendo arquivos...\n⚡ Mapeando módulos, rotas e dependências...\n🛠️ Executando análise técnica no workspace...\n📝 Estruturando relatório de engenharia...`,
+          });
+        }
+      }, 14000));
+
+      const clearAllTimers = () => {
+        progressTimers.forEach(t => clearTimeout(t));
+      };
+
       const child = spawn(agyCmd, args, {
         cwd: workingDir,
         env: sanitizedEnv,
@@ -189,12 +235,17 @@ export class BridgeDaemonService {
       const timer = setTimeout(() => {
         if (!isSettled) {
           isSettled = true;
+          clearAllTimers();
           try { child.kill('SIGKILL'); } catch (e) {}
           reject(new Error(`Timeout de ${timeoutMs}ms excedido na execução do Antigravity CLI`));
         }
       }, timeoutMs);
 
       child.stdout?.on('data', (data) => {
+        if (!hasReceivedRealOutput) {
+          hasReceivedRealOutput = true;
+          clearAllTimers();
+        }
         const chunkStr = data.toString();
         outputBuffer += chunkStr;
 
@@ -210,6 +261,10 @@ export class BridgeDaemonService {
       });
 
       child.stderr?.on('data', (data) => {
+        if (!hasReceivedRealOutput) {
+          hasReceivedRealOutput = true;
+          clearAllTimers();
+        }
         const chunkStr = data.toString();
         outputBuffer += chunkStr;
 
@@ -227,6 +282,7 @@ export class BridgeDaemonService {
         if (!isSettled) {
           isSettled = true;
           clearTimeout(timer);
+          clearAllTimers();
           if ((err as any).code === 'ENOENT') {
             resolve({
               output: `[${request.agentId}]: Execução local concluída para "${request.prompt}". Código e artefatos validados.`,
@@ -242,6 +298,7 @@ export class BridgeDaemonService {
         if (!isSettled) {
           isSettled = true;
           clearTimeout(timer);
+          clearAllTimers();
           const cleanOutput = outputBuffer.trim();
           if (code === 0 || cleanOutput.length > 0) {
             resolve({

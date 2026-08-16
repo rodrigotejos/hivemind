@@ -63,14 +63,8 @@ export function resolveModelConfig(
 
   // Mapeamento normalizado para a API do Google Gemini
   let actualModelName = 'gemini-1.5-flash';
-  if (targetModel.includes('3.1-pro') || targetModel.includes('pro')) {
+  if (targetModel.includes('3.1-pro') || targetModel.includes('pro') || targetModel.includes('high')) {
     actualModelName = 'gemini-1.5-pro';
-  } else if (targetModel.includes('3.7-flash') || targetModel.includes('2.0')) {
-    actualModelName = 'gemini-2.0-flash';
-  } else if (targetModel.includes('3.6-flash')) {
-    actualModelName = 'gemini-2.0-flash';
-  } else if (targetModel.includes('lite') || targetModel.includes('flash-lite')) {
-    actualModelName = 'gemini-1.5-flash';
   } else {
     actualModelName = 'gemini-1.5-flash';
   }

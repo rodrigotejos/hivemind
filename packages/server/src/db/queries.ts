@@ -56,7 +56,7 @@ export function addAgentToProject(projectId: string, agentId: string, role: stri
 export function getProjectMessages(projectId: string, threadId?: string) {
   if (threadId && threadId !== 'all') {
     if (threadId === 'general') {
-      return db.prepare('SELECT * FROM messages WHERE project_id = ? AND (thread_id IS NULL OR thread_id = "" OR thread_id = "general") ORDER BY created_at ASC').all(projectId);
+      return db.prepare("SELECT * FROM messages WHERE project_id = ? AND (thread_id IS NULL OR thread_id = '' OR thread_id = 'general') ORDER BY created_at ASC").all(projectId);
     }
     return db.prepare('SELECT * FROM messages WHERE project_id = ? AND thread_id = ? ORDER BY created_at ASC').all(projectId, threadId);
   }
