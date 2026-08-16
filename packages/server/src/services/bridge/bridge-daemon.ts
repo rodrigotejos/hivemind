@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { AgentCircuitBreaker } from './circuit-breaker';
+import { TelemetryService } from '../telemetry';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
 
@@ -106,6 +107,18 @@ export class BridgeDaemonService {
         priority: 'normal',
         content: result.output,
         waitingResponse: false,
+      });
+
+      // Grava telemetria de consumo de tokens e métricas LangSmith
+      const promptTokens = result.tokensUsed?.prompt || Math.ceil(request.prompt.length / 4);
+      const completionTokens = result.tokensUsed?.completion || Math.ceil(result.output.length / 4);
+      TelemetryService.getInstance().recordCLISpan(request.projectId, {
+        agentRole: request.agentRole as any,
+        promptTokens,
+        completionTokens,
+        durationMs,
+        timestamp: new Date().toISOString(),
+        exitCode: 0,
       });
 
       // 2. Notifica encerramento do streaming com a mensagem persistida

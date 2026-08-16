@@ -100,6 +100,10 @@ export default function CockpitPanel({
       setIsLoading(false);
     });
 
+    socket.on('telemetry_updated', (data) => {
+      if (data.telemetry) setTelemetry(data.telemetry);
+    });
+
     const interval = setInterval(() => {
       fetchGraphState();
       fetchTelemetry();

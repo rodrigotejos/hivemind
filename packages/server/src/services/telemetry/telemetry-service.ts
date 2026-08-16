@@ -1,5 +1,7 @@
 import { Client } from 'langsmith';
 import { AgentRole, CLISpanPayload, ProjectTelemetry } from '@ai-dlc/sdk';
+import db from '../../db/connection';
+import { io } from '../../index';
 
 export interface RecordedSpan {
   id: string;
@@ -14,7 +16,6 @@ export interface RecordedSpan {
 export class TelemetryService {
   private static instance: TelemetryService;
   private langsmithClient: Client | null = null;
-  private projectSpans = new Map<string, RecordedSpan[]>();
 
   private constructor() {
     const apiKey = process.env.LANGSMITH_API_KEY || process.env.LANGCHAIN_API_KEY;
@@ -35,62 +36,99 @@ export class TelemetryService {
   }
 
   public async recordCLISpan(projectId: string, span: CLISpanPayload): Promise<void> {
-    const recorded: RecordedSpan = {
-      id: `span_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
-      projectId,
-      agentRole: span.agentRole,
-      promptTokens: span.promptTokens || 0,
-      completionTokens: span.completionTokens || 0,
-      durationMs: span.durationMs || 0,
-      timestamp: span.timestamp || new Date().toISOString(),
-    };
+    const id = `span_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
+    const timestamp = span.timestamp || new Date().toISOString();
+    const promptTokens = span.promptTokens || 0;
+    const completionTokens = span.completionTokens || 0;
+    const durationMs = span.durationMs || 0;
+    const agentRole = span.agentRole || 'worker';
 
-    if (!this.projectSpans.has(projectId)) {
-      this.projectSpans.set(projectId, []);
+    // 1. Salva de forma persistente no SQLite
+    try {
+      db.prepare(`
+        INSERT INTO telemetry_spans (id, project_id, agent_role, prompt_tokens, completion_tokens, duration_ms, timestamp)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+      `).run(id, projectId, agentRole, promptTokens, completionTokens, durationMs, timestamp);
+    } catch (e) {
+      console.warn('Falha ao salvar telemetry span no banco:', e);
     }
-    this.projectSpans.get(projectId)!.push(recorded);
 
-    // Se cliente LangSmith estiver configurado, envia span remoto
+    // 2. Se cliente LangSmith estiver configurado, envia span remoto
     if (this.langsmithClient) {
       try {
         await this.langsmithClient.createRun({
-          name: `agy-cli-${span.agentRole}`,
+          name: `hivemind-${agentRole}`,
           run_type: 'llm',
-          inputs: { agentRole: span.agentRole, promptTokens: span.promptTokens },
-          outputs: { completionTokens: span.completionTokens, exitCode: span.exitCode },
-          start_time: new Date(span.timestamp).getTime(),
+          inputs: { agentRole, promptTokens },
+          outputs: { completionTokens, exitCode: span.exitCode },
+          start_time: new Date(timestamp).getTime(),
           end_time: Date.now(),
-          extra: { projectId, durationMs: span.durationMs },
+          extra: { projectId, durationMs },
         });
       } catch (e) {
         // Falha no envio remoto não bloqueia o fluxo local
       }
     }
+
+    // 3. Emite métricas atualizadas via Socket.IO para o dashboard em tempo real
+    const metrics = this.getProjectMetrics(projectId);
+    io.to(`project_${projectId}`).emit('telemetry_updated', { telemetry: metrics });
   }
 
   public getProjectMetrics(projectId: string): ProjectTelemetry {
-    const spans = this.projectSpans.get(projectId) || [];
-    let totalTokens = 0;
-    const agents = new Set<string>();
+    try {
+      const row = db.prepare(`
+        SELECT 
+          COALESCE(SUM(prompt_tokens + completion_tokens), 0) as totalTokens,
+          COUNT(*) as runsCount
+        FROM telemetry_spans 
+        WHERE project_id = ?
+      `).get(projectId) as any;
 
-    for (const span of spans) {
-      totalTokens += (span.promptTokens + span.completionTokens);
-      agents.add(span.agentRole);
+      const roles = db.prepare(`
+        SELECT DISTINCT agent_role 
+        FROM telemetry_spans 
+        WHERE project_id = ?
+      `).all(projectId) as any[];
+
+      const totalTokens = row?.totalTokens || 0;
+      const runsCount = row?.runsCount || 0;
+      const activeAgents = roles.map(r => r.agent_role);
+
+      // Estimativa de custo: $0.075 por 1M de tokens (Gemini Flash baseline)
+      const estimatedCostUsd = Number(((totalTokens / 1_000_000) * 0.075).toFixed(6));
+
+      return {
+        projectId,
+        totalTokens,
+        estimatedCostUsd,
+        runsCount,
+        activeAgents,
+      };
+    } catch (e) {
+      return {
+        projectId,
+        totalTokens: 0,
+        estimatedCostUsd: 0,
+        runsCount: 0,
+        activeAgents: [],
+      };
     }
-
-    // Estimativa de custo: $0.075 por 1M de tokens (Gemini Flash baseline)
-    const estimatedCostUsd = Number(((totalTokens / 1_000_000) * 0.075).toFixed(6));
-
-    return {
-      projectId,
-      totalTokens,
-      estimatedCostUsd,
-      runsCount: spans.length,
-      activeAgents: Array.from(agents),
-    };
   }
 
   public getSpans(projectId: string): RecordedSpan[] {
-    return this.projectSpans.get(projectId) || [];
+    try {
+      const rows = db.prepare(`
+        SELECT id, project_id as projectId, agent_role as agentRole, prompt_tokens as promptTokens, completion_tokens as completionTokens, duration_ms as durationMs, timestamp
+        FROM telemetry_spans
+        WHERE project_id = ?
+        ORDER BY timestamp DESC
+        LIMIT 50
+      `).all(projectId) as any[];
+
+      return rows;
+    } catch (e) {
+      return [];
+    }
   }
 }

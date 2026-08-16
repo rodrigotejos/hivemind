@@ -2,6 +2,7 @@ import { AgentGraphStateType, GraphMessage } from './state';
 import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
 import { getModel, resolveModelConfig, updateSharedContext, expandContextWithRealData } from '../ai-manager';
 import { BridgeDaemonService } from '../bridge/bridge-daemon';
+import { TelemetryService } from '../telemetry';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
 
@@ -74,11 +75,13 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
     } else {
       nextRole = 'beta_backend';
     }
-  } else if (!rolesActed.includes('beta-backend') && (goalLower.includes('api') || goalLower.includes('backend') || goalLower.includes('banco') || goalLower.includes('rota') || goalLower.includes('analise') || goalLower.includes('engenharia reversa'))) {
+  } else if (!rolesActed.includes('beta-backend') && (goalLower.includes('api') || goalLower.includes('backend') || goalLower.includes('banco') || goalLower.includes('rota') || goalLower.includes('analise') || goalLower.includes('engenharia reversa') || goalLower.includes('blue team'))) {
     nextRole = 'beta_backend';
+  } else if (!rolesActed.includes('delta-security') && (goalLower.includes('auth') || goalLower.includes('segurança') || goalLower.includes('red team') || goalLower.includes('adversarial') || goalLower.includes('vulnerabilidade') || goalLower.includes('injection'))) {
+    nextRole = 'delta_security';
   } else if (!rolesActed.includes('gamma-qa')) {
     nextRole = 'gamma_qa';
-  } else if (!rolesActed.includes('delta-security') && (goalLower.includes('auth') || goalLower.includes('segurança') || goalLower.includes('red team') || currentTurns >= 3)) {
+  } else if (!rolesActed.includes('delta-security')) {
     nextRole = 'delta_security';
   } else {
     // Todos os especialistas do fluxo completaram sua parte -> Convergência
@@ -109,7 +112,7 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
     } else if (role === 'qa') {
       roleSpecificDirective = `Analise a qualidade de código, testes e validações para o objetivo: "${state.goal}" no projeto "${targetDir}". Mapeie testes unitários, testes PBT e cobertura necessária. Gere artefatos de teste se aplicável e apresente um relatório técnico em Markdown.`;
     } else if (role === 'security') {
-      roleSpecificDirective = `Audite a segurança e integridade do projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie riscos de segurança, validação de inputs e conformidade OWASP. Apresente um relatório de conformidade e Red Team em Markdown.`;
+      roleSpecificDirective = `Execute a auditoria adversarial Red Team vs. Blue Team no projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie vulnerabilidades OWASP Top 10, sanitização de inputs, vazamento de credenciais e proteção contra injeções. Apresente um relatório de ataque/defesa adversarial e recomendações de mitigação em Markdown.`;
     } else if (role === 'frontend') {
       roleSpecificDirective = `Analise os componentes de UI, páginas e estilização do projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie componentes React, layout e acessibilidade. Apresente um relatório técnico em Markdown.`;
     } else {
@@ -270,6 +273,18 @@ export async function convergenceNode(state: AgentGraphStateType): Promise<Parti
 
     queries.updateProjectContext(state.projectId, updatedContext);
     io.to(`project_${state.projectId}`).emit('project_updated', { project: queries.getProject(state.projectId) });
+
+    // Grava telemetria do supervisor / síntese da Wiki
+    const promptTokens = Math.ceil(((project as any).shared_context?.length || 0 + agentReports.length) / 4);
+    const completionTokens = Math.ceil(updatedContext.length / 4);
+    TelemetryService.getInstance().recordCLISpan(state.projectId, {
+      agentRole: 'manager' as any,
+      promptTokens,
+      completionTokens,
+      durationMs: 2500,
+      timestamp: new Date().toISOString(),
+      exitCode: 0,
+    });
   }
 
   // 4. Emite atualização de estado do grafo para o Cockpit
