@@ -42,4 +42,7 @@ declare module 'lucide-react' {
   export const Cpu: Icon;
   export const CornerDownRight: Icon;
   export const Reply: Icon;
+  export const Layers: Icon;
+  export const MessageSquare: Icon;
+  export const Clock: Icon;
 }

@@ -1,5 +1,5 @@
 import { Annotation } from '@langchain/langgraph';
-import { AgentRole, Message, InterruptPayload } from '@ai-dlc/sdk';
+import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
 
 export interface GraphMessage {
   id: string;
@@ -13,6 +13,7 @@ export interface GraphMessage {
 
 export const AgentGraphAnnotation = Annotation.Root({
   projectId: Annotation<string>(),
+  sessionId: Annotation<string | undefined>(),
   taskId: Annotation<string>(),
   goal: Annotation<string>(),
   messages: Annotation<GraphMessage[]>({

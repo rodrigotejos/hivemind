@@ -53,7 +53,13 @@ export function addAgentToProject(projectId: string, agentId: string, role: stri
   return { projectId, agentId, role };
 }
 
-export function getProjectMessages(projectId: string) {
+export function getProjectMessages(projectId: string, threadId?: string) {
+  if (threadId && threadId !== 'all') {
+    if (threadId === 'general') {
+      return db.prepare('SELECT * FROM messages WHERE project_id = ? AND (thread_id IS NULL OR thread_id = "" OR thread_id = "general") ORDER BY created_at ASC').all(projectId);
+    }
+    return db.prepare('SELECT * FROM messages WHERE project_id = ? AND thread_id = ? ORDER BY created_at ASC').all(projectId, threadId);
+  }
   return db.prepare('SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
 }
 
@@ -132,3 +138,24 @@ export function getProjectNotifications(projectId: string) {
     ORDER BY n.created_at DESC
   `).all(projectId);
 }
+
+export function createTaskSession(projectId: string, title: string, goal?: string) {
+  const stmt = db.prepare('INSERT INTO task_sessions (project_id, title, goal, status) VALUES (?, ?, ?, ?) RETURNING *');
+  return stmt.get(projectId, title, goal || null, 'active');
+}
+
+export function getProjectTaskSessions(projectId: string) {
+  return db.prepare('SELECT * FROM task_sessions WHERE project_id = ? ORDER BY created_at DESC').all(projectId);
+}
+
+export function getTaskSession(id: string) {
+  return db.prepare('SELECT * FROM task_sessions WHERE id = ?').get(id);
+}
+
+export function updateTaskSession(id: string, updates: Partial<{ title: string; goal: string; status: string }>) {
+  const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  const values = Object.values(updates);
+  db.prepare(`UPDATE task_sessions SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values, id);
+  return getTaskSession(id);
+}
+

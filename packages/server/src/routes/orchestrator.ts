@@ -7,7 +7,7 @@ export const orchestratorRouter = Router();
 // Iniciar tarefa autônoma
 orchestratorRouter.post('/:projectId/graph/start', async (req: Request, res: Response): Promise<void> => {
   const { projectId } = req.params;
-  const { taskId, goal, maxTurns } = req.body;
+  const { taskId, goal, maxTurns, sessionId } = req.body;
 
   if (!goal) {
     res.status(400).json({ error: 'goal é obrigatório' });
@@ -20,11 +20,12 @@ orchestratorRouter.post('/:projectId/graph/start', async (req: Request, res: Res
       projectId,
       taskId || `task_${Date.now()}`,
       goal,
-      maxTurns || 5
+      maxTurns || 5,
+      sessionId
     );
 
     // Emite status para a sala do projeto no Socket.IO
-    io.to(`project_${projectId}`).emit('graph_state_updated', finalState);
+    io.to(`project_${projectId}`).emit('graph_state_updated', { ...finalState, sessionId });
 
     res.json({ success: true, state: finalState });
   } catch (error: any) {
@@ -36,7 +37,7 @@ orchestratorRouter.post('/:projectId/graph/start', async (req: Request, res: Res
 // Retomar tarefa pausada após decisão humana
 orchestratorRouter.post('/:projectId/graph/resume', async (req: Request, res: Response): Promise<void> => {
   const { projectId } = req.params;
-  const { checkpointId, decision } = req.body;
+  const { checkpointId, decision, sessionId } = req.body;
 
   if (!decision) {
     res.status(400).json({ error: 'decision é obrigatório' });
@@ -45,9 +46,9 @@ orchestratorRouter.post('/:projectId/graph/resume', async (req: Request, res: Re
 
   try {
     const orchestrator = LangGraphOrchestrator.getInstance();
-    const finalState = await orchestrator.resumeTask(projectId, checkpointId || '', decision);
+    const finalState = await orchestrator.resumeTask(projectId, checkpointId || '', decision, sessionId);
 
-    io.to(`project_${projectId}`).emit('graph_state_updated', finalState);
+    io.to(`project_${projectId}`).emit('graph_state_updated', { ...finalState, sessionId });
 
     res.json({ success: true, state: finalState });
   } catch (error: any) {
@@ -56,11 +57,12 @@ orchestratorRouter.post('/:projectId/graph/resume', async (req: Request, res: Re
   }
 });
 
-// Obter estado atual do grafo
+// Obter estado atual do grafo (global ou por sessão)
 orchestratorRouter.get('/:projectId/graph/state', (req: Request, res: Response): void => {
   const { projectId } = req.params;
+  const { sessionId } = req.query as { sessionId?: string };
   const orchestrator = LangGraphOrchestrator.getInstance();
-  const state = orchestrator.getState(projectId);
+  const state = orchestrator.getState(projectId, sessionId);
 
   if (!state) {
     res.json({ status: 'idle', messages: [] });

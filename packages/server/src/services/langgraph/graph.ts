@@ -64,11 +64,23 @@ export class LangGraphOrchestrator {
     return LangGraphOrchestrator.instance;
   }
 
-  public async startTask(projectId: string, taskId: string, goal: string, maxTurns: number = 5): Promise<AgentGraphStateType> {
-    const threadConfig = { configurable: { thread_id: `proj_${projectId}_task_${taskId}` } };
+  private getStateKey(projectId: string, sessionId?: string): string {
+    return sessionId ? `${projectId}_session_${sessionId}` : projectId;
+  }
+
+  public async startTask(
+    projectId: string,
+    taskId: string,
+    goal: string,
+    maxTurns: number = 5,
+    sessionId?: string
+  ): Promise<AgentGraphStateType> {
+    const threadId = sessionId ? `proj_${projectId}_sess_${sessionId}` : `proj_${projectId}_task_${taskId}`;
+    const threadConfig = { configurable: { thread_id: threadId } };
     
     const initialState: Partial<AgentGraphStateType> = {
       projectId,
+      sessionId,
       taskId,
       goal,
       messages: [{
@@ -84,14 +96,22 @@ export class LangGraphOrchestrator {
     };
 
     const finalState = await this.appGraph.invoke(initialState, threadConfig);
-    this.activeStates.set(projectId, finalState as AgentGraphStateType);
+    const key = this.getStateKey(projectId, sessionId);
+    this.activeStates.set(key, finalState as AgentGraphStateType);
     return finalState as AgentGraphStateType;
   }
 
-  public async resumeTask(projectId: string, checkpointId: string, humanDecision: string): Promise<AgentGraphStateType> {
-    const currentState = this.activeStates.get(projectId);
+  public async resumeTask(
+    projectId: string,
+    checkpointId: string,
+    humanDecision: string,
+    sessionId?: string
+  ): Promise<AgentGraphStateType> {
+    const key = this.getStateKey(projectId, sessionId);
+    const currentState = this.activeStates.get(key);
     const taskId = currentState ? currentState.taskId : 'resumed';
-    const threadConfig = { configurable: { thread_id: `proj_${projectId}_task_${taskId}` } };
+    const threadId = sessionId ? `proj_${projectId}_sess_${sessionId}` : `proj_${projectId}_task_${taskId}`;
+    const threadConfig = { configurable: { thread_id: threadId } };
 
     const updatePayload: Partial<AgentGraphStateType> = {
       status: 'running',
@@ -105,11 +125,12 @@ export class LangGraphOrchestrator {
     };
 
     const finalState = await this.appGraph.invoke(updatePayload, threadConfig);
-    this.activeStates.set(projectId, finalState as AgentGraphStateType);
+    this.activeStates.set(key, finalState as AgentGraphStateType);
     return finalState as AgentGraphStateType;
   }
 
-  public getState(projectId: string): AgentGraphStateType | undefined {
-    return this.activeStates.get(projectId);
+  public getState(projectId: string, sessionId?: string): AgentGraphStateType | undefined {
+    const key = this.getStateKey(projectId, sessionId);
+    return this.activeStates.get(key);
   }
 }

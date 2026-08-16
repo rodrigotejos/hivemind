@@ -19,6 +19,22 @@ export function initDb() {
   } catch (e) {
     // Column already exists
   }
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS task_sessions (
+        id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        project_id TEXT NOT NULL REFERENCES projects(id),
+        title TEXT NOT NULL,
+        goal TEXT,
+        status TEXT DEFAULT 'active',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_task_sessions_project ON task_sessions(project_id, created_at);
+    `);
+  } catch (e) {}
+
   console.log('Database initialized');
 }
 

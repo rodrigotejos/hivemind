@@ -76,5 +76,11 @@
 - Unit 6: Cockpit Human-in-the-Loop Web Dashboard in React 19 (Committed)"
 **Context**: Construction Phase Complete across all units.
 
+## Task Sessions & Context Isolation Feature Request
+**Timestamp**: 2026-08-15T22:06:15-03:00
+**User Input**: "Comando Central de Colaboração Multi-Agente (LangGraph) eu imaginei isso aqui na area de caht. ou melhor ainda. uma nova are de caht. onde vamso ter cahat gerais por assim dizer, eu abrou um caht novo para supodno faer a tela novo. depois outro para fazer outra tela. em temspos semaprados e nao quero que nesses caso ele vem . porq ue hoje fiz duas tela nos foi feito o figma back etc. mais para ferente ppdem apra aruramr um biug, nao quero que o contexo te misturoa. usnado o ia-dlc vamos implemtear isso"
+**AI Response**: "Initiating AI-DLC Construction for Task Sessions & Context Isolation Feature. Implementing session-scoped message streams, multi-task LangGraph state machines, integrated in-chat Cockpit controller, and session switching UI with shared project technical context."
+**Context**: New Feature Construction - Task Sessions, Context Isolation & In-Chat Cockpit Integration.
+
 ---
 

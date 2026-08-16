@@ -9,7 +9,8 @@ const router = Router({ mergeParams: true });
 
 router.get('/', (req, res) => {
   const { projectId } = req.params as any;
-  const messages = queries.getProjectMessages(projectId);
+  const { threadId } = req.query as { threadId?: string };
+  const messages = queries.getProjectMessages(projectId, threadId);
   res.json(messages);
 });
 
