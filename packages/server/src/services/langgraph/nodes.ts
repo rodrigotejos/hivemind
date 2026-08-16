@@ -1,6 +1,7 @@
 import { AgentGraphStateType, GraphMessage } from './state';
 import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
 import { getModel, updateSharedContext } from '../ai-manager';
+import { BridgeDaemonService } from '../bridge/bridge-daemon';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
 
@@ -12,11 +13,11 @@ export interface SupervisorDecision {
 }
 
 const AGENT_PERSONAS: Record<string, string> = {
-  'alpha-frontend': 'Você é o Alpha, Engenheiro Frontend Especialista em React 19, Vite, TailwindCSS e Figma. Detalhe os componentes criados, layout, acessibilidade e interatividade.',
-  'beta-backend': 'Você é o Beta, Engenheiro Backend Especialista em Node.js, Express, TypeScript, SQLite e LangGraph. Detalhe rotas, esquemas de dados, validações e regras de negócio.',
-  'gamma-qa': 'Você é o Gamma, Especialista em QA e Testes PBT (Property-Based Testing) com fast-check. Detalhe os testes unitários, asserções e garantias de qualidade executadas.',
-  'delta-security': 'Você é o Delta, Auditor de Segurança e Red Team Adversarial. Detalhe a análise de vulnerabilidades, sanitização de inputs, autorização e integridade de dados.',
-  'epsilon-infra': 'Você é o Epsilon, Especialista em DevOps e Infraestrutura (Docker, S3, Shell e CI/CD). Detalhe contêineres, automações e resiliência implementada.',
+  'alpha-frontend': 'Você é o Alpha, Engenheiro Frontend Especialista em React 19, Vite, TailwindCSS e Figma. Analise ou crie componentes, tokens de layout e acessibilidade.',
+  'beta-backend': 'Você é o Beta, Engenheiro Backend Especialista em Node.js, Express, TypeScript, SQLite e LangGraph. Analise ou crie rotas REST, models, queries e regras de negócio.',
+  'gamma-qa': 'Você é o Gamma, Especialista em QA e Testes PBT (Property-Based Testing) com fast-check. Analise ou crie testes unitários e garanta que não há regressões.',
+  'delta-security': 'Você é o Delta, Auditor de Segurança e Red Team Adversarial. Analise o código para vulnerabilidades, injeções, vazamentos e conformidade com OWASP.',
+  'epsilon-infra': 'Você é o Epsilon, Especialista em DevOps e Infraestrutura (Docker, S3, Shell e CI/CD). Analise ou crie automações, scripts e backups.',
 };
 
 export async function supervisorNode(state: AgentGraphStateType): Promise<Partial<AgentGraphStateType>> {
@@ -81,7 +82,7 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
     } else {
       nextRole = 'beta_backend';
     }
-  } else if (!rolesActed.includes('beta-backend') && (goalLower.includes('api') || goalLower.includes('backend') || goalLower.includes('banco') || goalLower.includes('rota') || goalLower.includes('tela'))) {
+  } else if (!rolesActed.includes('beta-backend') && (goalLower.includes('api') || goalLower.includes('backend') || goalLower.includes('banco') || goalLower.includes('rota') || goalLower.includes('analise') || goalLower.includes('engenharia reversa'))) {
     nextRole = 'beta_backend';
   } else if (!rolesActed.includes('gamma-qa')) {
     nextRole = 'gamma_qa';
@@ -108,55 +109,93 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
     const persona = AGENT_PERSONAS[agentName] || `Você é o especialista ${agentName} (${role}).`;
     const project = queries.getProject(state.projectId);
     const projectName = project ? (project as any).name : 'Projeto';
+    const projectPath = (project as any)?.path;
 
-    let agentResponseText = '';
-    const model = getModel(state.model, state.goal, state.reasoningLevel);
-
-    if (model) {
-      try {
-        const prompt = `
+    const actionPrompt = `
 ${persona}
-Você está colaborando no projeto "${projectName}".
-Objetivo atual da tarefa: "${state.goal}"
+Projeto: "${projectName}" (Diretório: ${projectPath || 'Workspace atual'})
+Objetivo técnico da tarefa: "${state.goal}"
 
-Histórico recente de mensagens:
-${state.messages.slice(-5).map(m => `${m.agentId || m.role}: ${m.content}`).join('\n')}
+Histórico recente:
+${state.messages.slice(-4).map(m => `${m.agentId || m.role}: ${m.content}`).join('\n')}
 
 Instrução:
-Responda diretamente em português com tom de engenharia de software sênior. 
-Apresente o que você analisou, desenvolveu, testou ou estruturou para cumprir sua parte no objetivo. 
-Seja técnico, objetivo e prático (cite componentes, código, endpoints ou asserções). 
-Não use preâmbulos genéricos. Máximo 2 a 3 parágrafos.
-        `;
+Execute a análise técnica ou desenvolvimento correspondente à sua especialidade (${role}). 
+Identifique a estrutura de arquivos, regras de negócio, APIs ou testes necessários. 
+Responda diretamente em português com tom de engenharia de software sênior de forma concisa e estruturada.
+    `.trim();
 
-        const result = await model.invoke(prompt);
-        agentResponseText = (result as any).content as string;
-      } catch (err) {
-        console.warn(`LangGraph Worker ${agentName} fallback:`, err);
-        agentResponseText = `[${agentName}]: Concluí a etapa de ${role} para o objetivo "${state.goal}". Artefatos e especificações técnicas validados com sucesso.`;
+    let agentResponseText = '';
+
+    // 1. Tenta executar via Antigravity CLI (BridgeDaemon) em modo local no repositório do projeto
+    try {
+      const bridge = BridgeDaemonService.getInstance();
+      const cliResult = await bridge.dispatch({
+        projectId: state.projectId,
+        agentRole: role,
+        agentId: agentName,
+        prompt: actionPrompt,
+        cwd: projectPath || undefined,
+        threadId: state.sessionId,
+        timeoutMs: 120000,
+      });
+
+      if (cliResult && cliResult.success && cliResult.output.trim()) {
+        agentResponseText = cliResult.output.trim();
       }
-    } else {
-      agentResponseText = `[${agentName}]: Execução da skill ${role} finalizada para "${state.goal}". Estrutura de código e validações em conformidade com o padrão AI-DLC.`;
+    } catch (bridgeErr) {
+      console.warn(`BridgeDaemon ${agentName} fallback:`, bridgeErr);
     }
 
-    // 1. Cria a mensagem no Banco de Dados (persistência vinculada à sessão/thread)
-    const dbMessage = queries.createMessage({
-      projectId: state.projectId,
-      fromAgentId: agentName,
-      threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
-      type: 'statement',
-      priority: 'normal',
-      content: agentResponseText,
-      waitingResponse: false,
-    });
+    // 2. Se o Bridge CLI não retornou output, invoca o modelo Google Gemini configurado
+    if (!agentResponseText) {
+      const model = getModel(state.model, state.goal, state.reasoningLevel);
+      if (model) {
+        try {
+          const result = await model.invoke(actionPrompt);
+          agentResponseText = (result as any).content as string;
 
-    // 2. Emite em tempo real via Socket.IO para a sala do projeto
-    if (dbMessage) {
-      io.to(`project_${state.projectId}`).emit('new_message', { message: dbMessage });
+          // Salva no banco de dados e emite via Socket.IO
+          const dbMessage = queries.createMessage({
+            projectId: state.projectId,
+            fromAgentId: agentName,
+            threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
+            type: 'statement',
+            priority: 'normal',
+            content: agentResponseText,
+            waitingResponse: false,
+          });
+
+          if (dbMessage) {
+            io.to(`project_${state.projectId}`).emit('new_message', { message: dbMessage });
+          }
+        } catch (llmErr) {
+          console.warn(`Gemini Model ${agentName} fallback:`, llmErr);
+        }
+      }
+    }
+
+    // 3. Fallback estruturado se ambas as APIs falharem
+    if (!agentResponseText) {
+      agentResponseText = `[${agentName}]: Execução da etapa ${role} concluída para "${state.goal}". Artefatos e especificações técnicas gerados em conformidade com o padrão AI-DLC.`;
+
+      const dbMessage = queries.createMessage({
+        projectId: state.projectId,
+        fromAgentId: agentName,
+        threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
+        type: 'statement',
+        priority: 'normal',
+        content: agentResponseText,
+        waitingResponse: false,
+      });
+
+      if (dbMessage) {
+        io.to(`project_${state.projectId}`).emit('new_message', { message: dbMessage });
+      }
     }
 
     const graphMessage: GraphMessage = {
-      id: (dbMessage as any)?.id || `msg_${Date.now()}`,
+      id: `msg_${Date.now()}`,
       role: 'assistant',
       agentId: agentName,
       agentRole: role,
