@@ -13,6 +13,14 @@ export interface ModelResolution {
   thinkingBudget: number;
 }
 
+/**
+ * Retorna o modelo meta de roteamento interno (Gerenciador do Modo Auto).
+ * Estritamente configurado para 3.5 Flash Lite sem raciocínio (Reasoning: OFF, 0 tokens thinking).
+ */
+export function getAutoRouterModel(): ChatGoogleGenerativeAI | null {
+  return getModel('gemini-3.5-flash-lite', '', 'off');
+}
+
 export function resolveModelConfig(
   requestedModel: string = 'auto', 
   promptContent: string = '',
@@ -23,7 +31,7 @@ export function resolveModelConfig(
   let targetModel = requestedModel;
   let resolvedReasoning = reasoningLevel;
 
-  // Modo AUTO: Escala dinamicamente com base na complexidade detectada
+  // Modo AUTO: O gerenciador (3.5 Flash Lite sem raciocínio) decide o modelo de destino
   if (!requestedModel || requestedModel === 'auto') {
     const isHighComplexity = 
       contentLower.includes('arquitetura') ||
@@ -46,14 +54,14 @@ export function resolveModelConfig(
       resolvedReasoning = 'high';
     } else if (isLightTask) {
       targetModel = 'gemini-3.5-flash-lite';
-      resolvedReasoning = 'low';
+      resolvedReasoning = 'off';
     } else {
       targetModel = 'gemini-3.5-flash';
       resolvedReasoning = 'medium';
     }
   }
 
-  // Mapeamento normalizado para nomes de modelo da API do Google
+  // Mapeamento normalizado para a API do Google Gemini
   let actualModelName = 'gemini-1.5-flash';
   if (targetModel.includes('3.1-pro') || targetModel.includes('pro')) {
     actualModelName = 'gemini-1.5-pro';
@@ -140,6 +148,10 @@ export async function summarizeProject(projectId: string, modelName?: string, re
   }
 }
 
+/**
+ * Análise de prioridade e risco das mensagens.
+ * Utiliza estritamente 3.5 Flash Lite sem raciocínio (Reasoning: OFF) para classificação instantânea sem gasto de tokens.
+ */
 export async function analyzeMessagePriority(
   messageContent: string, 
   projectContext: string,
@@ -151,8 +163,8 @@ export async function analyzeMessagePriority(
   conflictRisk: boolean,
   resolvedModel?: string
 }> {
-  const config = resolveModelConfig(modelName, messageContent, reasoningLevel);
-  const model = getModel(config.targetModel, messageContent, config.reasoningLevel);
+  // Gerenciamento e classificação utilizam 3.5 Flash Lite com Reasoning OFF
+  const model = getAutoRouterModel() || getModel(modelName, messageContent, reasoningLevel);
 
   if (!model) {
     const lc = messageContent.toLowerCase();
@@ -161,7 +173,7 @@ export async function analyzeMessagePriority(
       priority: isCritical ? 'critical' : 'normal',
       needsHuman: isCritical,
       conflictRisk: false,
-      resolvedModel: config.targetModel,
+      resolvedModel: 'gemini-3.5-flash-lite',
     };
   }
 
@@ -186,10 +198,10 @@ export async function analyzeMessagePriority(
     const text = (result as any).content as string;
     const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
     const parsed = JSON.parse(jsonStr);
-    return { ...parsed, resolvedModel: config.targetModel };
+    return { ...parsed, resolvedModel: 'gemini-3.5-flash-lite' };
   } catch (e) {
     console.error('Failed to parse AI response', e);
-    return { priority: 'normal', needsHuman: false, conflictRisk: false, resolvedModel: config.targetModel };
+    return { priority: 'normal', needsHuman: false, conflictRisk: false, resolvedModel: 'gemini-3.5-flash-lite' };
   }
 }
 
