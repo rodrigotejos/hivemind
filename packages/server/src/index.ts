@@ -17,13 +17,14 @@ dotenv.config();
 const app = express();
 const httpServer = createServer(app);
 
-// Setup Socket.IO
-const io = new Server(httpServer, {
+export const io = new Server(httpServer, {
   cors: {
     origin: '*', // For MVP
     methods: ['GET', 'POST', 'PATCH', 'DELETE']
   }
 });
+
+import { orchestratorRouter } from './routes/orchestrator';
 
 app.set('io', io); // Allow routes to access io
 
@@ -32,6 +33,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.use('/api/projects', orchestratorRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/agents', agentsRouter);
 app.use('/api/notifications', notificationsRouter);
