@@ -144,8 +144,3 @@ vite.config.ts.timestamp-*
 
 # AI-DLC workflow directory
 .aidlc/
-
-aidlc-docs/
-.agent/rules/ai-dlc.md
-.agent/skills/ai-dlc/SKILL.md
-AGENTS.md
