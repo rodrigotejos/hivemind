@@ -25,6 +25,7 @@ export const io = new Server(httpServer, {
 });
 
 import { orchestratorRouter } from './routes/orchestrator';
+import { bridgeRouter } from './routes/bridge';
 
 app.set('io', io); // Allow routes to access io
 
@@ -33,6 +34,7 @@ app.use(cors());
 app.use(express.json());
 
 // Routes
+app.use('/api', bridgeRouter);
 app.use('/api/projects', orchestratorRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/agents', agentsRouter);
