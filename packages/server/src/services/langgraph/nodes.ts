@@ -99,27 +99,22 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
 export function createAgentWorkerNode(role: AgentRole, agentName: string) {
   return async (state: AgentGraphStateType): Promise<Partial<AgentGraphStateType>> => {
     const project = queries.getProject(state.projectId);
-    const projectName = project ? (project as any).name : 'Projeto';
     const projectPath = (project as any)?.path;
     const targetDir = projectPath || process.cwd();
 
-    // Diretiva de Engenharia Imperativa direta para o Antigravity CLI
-    const actionPrompt = `
-DIRETIVA TÉCNICA DE ENGENHARIA ({role.toUpperCase()} - {agentName}):
-Você é o engenheiro especialista em ${role} atuando no projeto "${projectName}".
-Objetivo da Tarefa: "${state.goal}"
-Diretório do Projeto: "${targetDir}"
-
-Instruções de Execução Obrigatórias:
-1. Inspecione e analise o código-fonte, manifestos (package.json, tsconfig, etc.) e estrutura de pastas em "${targetDir}".
-2. Execute as ações reais de engenharia necessárias para este objetivo (engenharia reversa, análise arquitetural, geração de documentação ou implementação de código).
-3. Se o objetivo solicitar geração de artefatos de documentação, crie ou atualize os arquivos correspondentes em "${targetDir}".
-4. Apresente um relatório técnico claro, estruturado e aprofundado em Markdown em português com:
-   - 📦 **Mapeamento de Módulos e Dependências**
-   - 🏛️ **Arquitetura e Fluxo de Dados**
-   - 🛠️ **Ações Executadas e Arquivos Criados/Analisados**
-   - 🎯 **Status e Recomendações**
-    `.trim();
+    // Diretiva de Engenharia limpa e direta para execução sem truncamento no CLI
+    let roleSpecificDirective = '';
+    if (role === 'backend') {
+      roleSpecificDirective = `Analise a arquitetura de backend, rotas, banco de dados e APIs do projeto no diretório "${targetDir}". Objetivo: "${state.goal}". Mapeie as rotas, banco de dados, models, APIs e dependências. Gere os artefatos de documentação necessários e apresente um relatório técnico completo em Markdown com a arquitetura.`;
+    } else if (role === 'qa') {
+      roleSpecificDirective = `Analise a qualidade de código, testes e validações para o objetivo: "${state.goal}" no projeto "${targetDir}". Mapeie testes unitários, testes PBT e cobertura necessária. Gere artefatos de teste se aplicável e apresente um relatório técnico em Markdown.`;
+    } else if (role === 'security') {
+      roleSpecificDirective = `Audite a segurança e integridade do projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie riscos de segurança, validação de inputs e conformidade OWASP. Apresente um relatório de conformidade e Red Team em Markdown.`;
+    } else if (role === 'frontend') {
+      roleSpecificDirective = `Analise os componentes de UI, páginas e estilização do projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie componentes React, layout e acessibilidade. Apresente um relatório técnico em Markdown.`;
+    } else {
+      roleSpecificDirective = `Analise a infraestrutura, scripts de automação e contêineres do projeto em "${targetDir}" para o objetivo: "${state.goal}". Apresente um relatório técnico em Markdown.`;
+    }
 
     let agentResponseText = '';
     const resolved = resolveModelConfig(state.model || 'auto', state.goal, state.reasoningLevel || 'medium');
@@ -131,7 +126,7 @@ Instruções de Execução Obrigatórias:
         projectId: state.projectId,
         agentRole: role,
         agentId: agentName,
-        prompt: actionPrompt,
+        prompt: roleSpecificDirective,
         model: resolved.actualModelName,
         reasoningLevel: resolved.reasoningLevel,
         cwd: targetDir,
@@ -141,8 +136,7 @@ Instruções de Execução Obrigatórias:
 
       if (cliResult && cliResult.success && cliResult.output.trim()) {
         const out = cliResult.output.trim();
-        // Garante que não é apenas uma saudação genérica
-        if (!out.startsWith('Olá! Sou o Antigravity') || out.length > 200) {
+        if (!out.startsWith('Olá! Sou o Antigravity') && !out.startsWith('Pronto para receber') && !out.startsWith('Olá! Como posso')) {
           agentResponseText = out;
         }
       }
@@ -155,7 +149,7 @@ Instruções de Execução Obrigatórias:
       const model = getModel(state.model, state.goal, state.reasoningLevel);
       if (model) {
         try {
-          const result = await model.invoke(actionPrompt);
+          const result = await model.invoke(roleSpecificDirective);
           agentResponseText = (result as any).content as string;
 
           // Salva no banco de dados e emite via Socket.IO

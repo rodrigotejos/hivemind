@@ -1,4 +1,6 @@
 import { spawn } from 'child_process';
+import path from 'path';
+import fs from 'fs';
 import { AgentCircuitBreaker } from './circuit-breaker';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
@@ -128,9 +130,20 @@ export class BridgeDaemonService {
 
       const workingDir = request.cwd || process.cwd();
 
-      // Executa o Antigravity CLI (agy) com o workspace do repositório
+      // Resolve o executável do Antigravity CLI de forma robusta
+      let agyCmd = 'agy';
+      if (process.platform === 'win32') {
+        const localAgy = path.join(process.env.LOCALAPPDATA || 'C:\\Users\\showr\\AppData\\Local', 'agy\\bin\\agy.exe');
+        if (fs.existsSync(localAgy)) {
+          agyCmd = localAgy;
+        }
+      }
+
+      // Sanitiza o prompt removendo quebras de linha para evitar truncamento no shell do Windows
+      const cleanPrompt = request.prompt.replace(/\r?\n/g, ' ').replace(/"/g, "'").trim();
+
       const args = [
-        '-p', request.prompt,
+        '-p', cleanPrompt,
         '--add-dir', workingDir,
         '--dangerously-skip-permissions',
       ];
@@ -138,10 +151,10 @@ export class BridgeDaemonService {
       const sanitizedEnv = { ...process.env };
       delete sanitizedEnv.NODE_DEBUG;
 
-      const child = spawn('agy', args, {
+      const child = spawn(agyCmd, args, {
         cwd: workingDir,
         env: sanitizedEnv,
-        shell: process.platform === 'win32',
+        shell: false,
       });
 
       const timer = setTimeout(() => {
