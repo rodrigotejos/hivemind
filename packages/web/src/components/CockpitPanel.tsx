@@ -307,7 +307,6 @@ export default function CockpitPanel({
                   <option value="gemini-3.6-flash" className="bg-zinc-900 text-white">🎯 3.6 Flash (Alta Precisão)</option>
                   <option value="gemini-3.7-flash" className="bg-zinc-900 text-white">🔥 3.7 Flash (Thinking Frontier)</option>
                   <option value="gemini-3.1-pro" className="bg-zinc-900 text-white">🧠 3.1 Pro (Raciocínio Profundo)</option>
-                  <option value="claude-3-5-sonnet" className="bg-zinc-900 text-white">🤖 Claude 3.5 Sonnet (Bridge)</option>
                 </select>
               </div>
 

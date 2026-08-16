@@ -481,7 +481,6 @@ export default function MessagesView() {
                     <option value="gemini-3.6-flash">🎯 3.6 Flash</option>
                     <option value="gemini-3.7-flash">🔥 3.7 Flash</option>
                     <option value="gemini-3.1-pro">🧠 3.1 Pro</option>
-                    <option value="claude-3-5-sonnet">🤖 Claude 3.5 Sonnet</option>
                   </select>
                 </div>
 
