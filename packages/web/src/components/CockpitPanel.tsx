@@ -268,10 +268,12 @@ export default function CockpitPanel({
             )}
           </h3>
 
-          <div className="flex items-center gap-2 text-[11px] text-zinc-400 font-mono">
-            <span className={`w-2 h-2 rounded-full ${graphState?.status === 'running' ? 'bg-amber-400 animate-ping' : graphState?.status === 'completed' ? 'bg-emerald-400' : 'bg-zinc-600'}`}></span>
-            <span>{graphState?.status || 'idle'}</span>
-            {graphState?.turnCount !== undefined && (
+          <div className="flex items-center gap-2 text-[11px] font-mono">
+            <span className={`w-2 h-2 rounded-full ${isLoading || graphState?.status === 'running' ? 'bg-amber-400 animate-ping' : graphState?.status === 'completed' ? 'bg-emerald-400' : 'bg-zinc-600'}`}></span>
+            <span className={graphState?.status === 'completed' ? 'text-emerald-400 font-semibold' : isLoading || graphState?.status === 'running' ? 'text-amber-400' : 'text-zinc-400'}>
+              {isLoading ? 'Iniciando agentes...' : graphState?.status === 'running' ? `Executando (${graphState.currentAgent || 'agentes'})...` : graphState?.status === 'completed' ? '✓ Concluído (Convergido)' : 'Pronto (Idle)'}
+            </span>
+            {graphState?.turnCount !== undefined && graphState?.status === 'running' && (
               <span className="text-zinc-500">({graphState.turnCount}/{graphState.maxTurns || 5}t)</span>
             )}
           </div>
@@ -347,8 +349,27 @@ export default function CockpitPanel({
               disabled={isLoading || !goalInput.trim()}
               className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold text-xs md:text-sm rounded-xl transition-all shadow-md flex items-center gap-2 cursor-pointer shrink-0"
             >
-              {isLoading ? <RefreshCw size={14} className="animate-spin" /> : <Play size={14} />}
-              Disparar Agentes
+              {isLoading ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin" />
+                  Iniciando...
+                </>
+              ) : graphState?.status === 'running' ? (
+                <>
+                  <RefreshCw size={14} className="animate-spin text-amber-300" />
+                  Agentes Ativos
+                </>
+              ) : graphState?.status === 'completed' ? (
+                <>
+                  <Play size={14} />
+                  Executar Nova Tarefa
+                </>
+              ) : (
+                <>
+                  <Play size={14} />
+                  Disparar Agentes
+                </>
+              )}
             </button>
           </div>
         </div>

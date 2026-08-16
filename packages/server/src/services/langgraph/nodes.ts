@@ -1,6 +1,6 @@
 import { AgentGraphStateType, GraphMessage } from './state';
 import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
-import { getModel, resolveModelConfig, updateSharedContext } from '../ai-manager';
+import { getModel, resolveModelConfig, updateSharedContext, expandContextWithRealData } from '../ai-manager';
 import { BridgeDaemonService } from '../bridge/bridge-daemon';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
@@ -242,15 +242,36 @@ export async function convergenceNode(state: AgentGraphStateType): Promise<Parti
     } catch (e) {}
   }
 
-  // 3. Atualiza o shared context do projeto (Wiki Técnica) com base no relatório dos agentes
+  // 3. Atualiza o shared context do projeto (Wiki Técnica) com base nos relatórios reais de todos os agentes
   const project = queries.getProject(state.projectId);
   if (project) {
-    const combinedAnalysis = state.messages.map(m => m.content).filter(c => c && !c.startsWith('🎯')).join('\n\n');
-    const summary = `### Resumo da Tarefa Concluída: ${state.goal}\n- Agentes participantes: ${Array.from(new Set(state.messages.map(m => m.agentId).filter(Boolean))).join(', ')}\n\n${combinedAnalysis}`;
-    const updatedContext = await updateSharedContext((project as any).shared_context || '', summary, state.model);
+    // Busca todas as mensagens reais salvas no SQLite para esta sessão
+    const sessionMessages = queries.getProjectMessages(state.projectId, state.sessionId);
+    const agentReports = sessionMessages
+      .filter((m: any) => m.from_agent_id !== 'rodrigo' && m.content && !m.content.startsWith('🎯') && m.type !== 'question')
+      .map((m: any) => m.content)
+      .join('\n\n---\n\n');
+
+    const updatedContext = await expandContextWithRealData(
+      (project as any).shared_context || '',
+      agentReports || state.messages.map(m => m.content).filter(c => c && !c.startsWith('🎯')).join('\n\n'),
+      state.model
+    );
+
     queries.updateProjectContext(state.projectId, updatedContext);
     io.to(`project_${state.projectId}`).emit('project_updated', { project: queries.getProject(state.projectId) });
   }
+
+  // 4. Emite atualização de estado do grafo para o Cockpit
+  io.to(`project_${state.projectId}`).emit('graph_state_updated', {
+    graphState: {
+      status: 'completed',
+      isConverged: true,
+      turnCount: state.turnCount,
+      maxTurns: state.maxTurns,
+      currentAgent: undefined,
+    }
+  });
 
   return {
     status: 'completed',

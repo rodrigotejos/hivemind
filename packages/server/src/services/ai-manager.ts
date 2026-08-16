@@ -236,20 +236,35 @@ export async function generateInitialContext(projectName: string, description: s
 
 export async function expandContextWithRealData(currentContext: string, analysisData: string, modelName?: string): Promise<string> {
   const model = getModel(modelName, analysisData);
-  if (!model) return currentContext + '\n\n### Análise Real Adicionada:\n' + analysisData;
+
+  if (!model) {
+    let base = currentContext.replace(/\*?\s*Nota:\s*Aguardando análise real do código\.?\s*\*?/gi, '').trim();
+    if (base.includes('### Análise Real') || base.includes('### Resumo')) {
+      return base + '\n\n' + analysisData;
+    }
+    return `${base}\n\n## 🏛️ Arquitetura, Módulos & Análise Técnica Real\n${analysisData}\n\n---\n*Contexto atualizado pelos agentes em conformidade com o ciclo AI-DLC.*`;
+  }
 
   const prompt = PromptTemplate.fromTemplate(`
-    Você é o Arquiteto Guardião do Contexto.
+    Você é o Arquiteto Guardião do Contexto Técnico.
     Aqui está o contexto OFICIAL preliminar do projeto:
     {currentContext}
     
-    Um agente acabou de realizar uma VARREDURA REAL NO CÓDIGO FONTE e retornou estes fatos inquestionáveis:
+    Os agentes acabaram de realizar uma ANÁLISE REAL NO CÓDIGO FONTE do repositório e retornaram estes fatos técnicos:
     {analysisData}
     
-    Sua tarefa: Expanda o Contexto Oficial integrando ESSES FATOS REAIS. 
-    Se a análise revelar a Stack Tecnológica (ex: Node, React, Tailwind), remova a mensagem "Aguardando varredura" e crie uma seção detalhada e profissional de "Arquitetura e Stack" EXATAMENTE com base no que foi encontrado. NÃO ALUCINE tecnologias que não foram listadas na análise.
+    Sua tarefa:
+    1. Remova completamente qualquer mensagem como "Aguardando análise real", "Aguardando varredura" ou placeholders preliminares.
+    2. Crie uma documentação técnica oficial, profissional e estruturada em Markdown com as seções:
+       - 📌 **Visão Geral e Objetivos do Projeto**
+       - 📦 **Mapeamento de Módulos, Pacotes e Dependências**
+       - 🏛️ **Arquitetura do Sistema, Rotas e Fluxo de Dados**
+       - 🧪 **Estratégia de Testes e Qualidade (QA & PBT)**
+       - 🔒 **Segurança e Diretrizes de Engenharia**
+    3. Seja detalhado, utilize tabelas, listas e diagramas conceituais quando apropriado.
+    4. NÃO invente tecnologias que não constam na análise.
     
-    Retorne apenas o Markdown limpo do novo contexto completo.
+    Retorne apenas o Markdown limpo e completo da nova Wiki Técnica.
   `);
 
   try {
@@ -258,7 +273,8 @@ export async function expandContextWithRealData(currentContext: string, analysis
     return (result as any).content as string;
   } catch (err) {
     console.error('AI Expand Context Error:', err);
-    return currentContext;
+    let base = currentContext.replace(/\*?\s*Nota:\s*Aguardando análise real do código\.?\s*\*?/gi, '').trim();
+    return `${base}\n\n## 🏛️ Arquitetura, Módulos & Análise Técnica Real\n${analysisData}\n\n---\n*Contexto atualizado pelos agentes em conformidade com o ciclo AI-DLC.*`;
   }
 }
 
