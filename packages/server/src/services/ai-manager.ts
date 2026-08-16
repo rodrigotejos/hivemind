@@ -61,12 +61,20 @@ export function resolveModelConfig(
     }
   }
 
-  // Mapeamento normalizado para a API do Google Gemini
-  let actualModelName = 'gemini-1.5-flash';
-  if (targetModel.includes('3.1-pro') || targetModel.includes('pro') || targetModel.includes('high')) {
-    actualModelName = 'gemini-1.5-pro';
+  // Mapeamento normalizado para a API do Google Gemini 3
+  let actualModelName = 'gemini-3.7-flash';
+  if (targetModel.includes('3.5-flash-lite') || targetModel.includes('lite')) {
+    actualModelName = 'gemini-3.5-flash-lite';
+  } else if (targetModel.includes('3.6-flash')) {
+    actualModelName = 'gemini-3.6-flash';
+  } else if (targetModel.includes('3.5-flash')) {
+    actualModelName = 'gemini-3.5-flash';
+  } else if (targetModel.includes('3.1-pro') || targetModel.includes('pro')) {
+    actualModelName = 'gemini-3.7-flash'; // 3.7 Flash Thinking como flagship de raciocínio profundo
+  } else if (targetModel.includes('2.5-flash')) {
+    actualModelName = 'gemini-2.5-flash';
   } else {
-    actualModelName = 'gemini-1.5-flash';
+    actualModelName = 'gemini-3.7-flash';
   }
 
   // Thinking Budget por Reasoning Level
