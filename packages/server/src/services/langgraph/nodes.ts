@@ -119,6 +119,16 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
     let agentResponseText = '';
     const resolved = resolveModelConfig(state.model || 'auto', state.goal, state.reasoningLevel || 'medium');
 
+    // Notifica que o agente iniciou o turno de trabalho
+    io.to(`project_${state.projectId}`).emit('agent_step_started', {
+      projectId: state.projectId,
+      sessionId: state.sessionId,
+      agentId: agentName,
+      agentRole: role,
+      status: 'running',
+      turnCount: state.turnCount,
+    });
+
     // 1. Tenta executar via Antigravity CLI (BridgeDaemon) no repositório do projeto
     try {
       const bridge = BridgeDaemonService.getInstance();

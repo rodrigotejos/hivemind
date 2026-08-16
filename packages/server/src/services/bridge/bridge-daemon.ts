@@ -79,8 +79,21 @@ export class BridgeDaemonService {
     const { request, resolve } = item;
     const cb = this.getCircuitBreaker(request.agentRole);
 
+    const streamMsgId = `stream_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+    // 1. Notifica início de streaming em tempo real para o chat
+    io.to(`project_${request.projectId}`).emit('agent_stream_start', {
+      messageId: streamMsgId,
+      projectId: request.projectId,
+      threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+      agentId: request.agentId,
+      agentRole: request.agentRole,
+      status: 'streaming',
+      initialText: `Iniciando análise técnica no repositório...`,
+    });
+
     try {
-      const result = await this.executeSubprocess(request);
+      const result = await this.executeSubprocess(request, streamMsgId);
       const durationMs = Date.now() - startTime;
       cb.recordSuccess();
 
@@ -93,6 +106,14 @@ export class BridgeDaemonService {
         priority: 'normal',
         content: result.output,
         waitingResponse: false,
+      });
+
+      // 2. Notifica encerramento do streaming com a mensagem persistida
+      io.to(`project_${request.projectId}`).emit('agent_stream_end', {
+        messageId: streamMsgId,
+        projectId: request.projectId,
+        threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+        finalMessage: createdMessage,
       });
 
       if (createdMessage) {
@@ -110,6 +131,14 @@ export class BridgeDaemonService {
       cb.recordFailure();
 
       console.error(`BridgeDaemon falha na execução do agente ${request.agentId}:`, err);
+
+      io.to(`project_${request.projectId}`).emit('agent_stream_error', {
+        messageId: streamMsgId,
+        projectId: request.projectId,
+        agentId: request.agentId,
+        error: err.message || 'Erro de execução no Antigravity CLI',
+      });
+
       resolve({
         success: false,
         output: '',
@@ -122,7 +151,7 @@ export class BridgeDaemonService {
     }
   }
 
-  private executeSubprocess(request: CLIExecutionRequest): Promise<{ output: string; tokensUsed?: { prompt: number; completion: number } }> {
+  private executeSubprocess(request: CLIExecutionRequest, streamMsgId: string): Promise<{ output: string; tokensUsed?: { prompt: number; completion: number } }> {
     return new Promise((resolve, reject) => {
       const timeoutMs = request.timeoutMs || 300000; // 5 min timeout
       let outputBuffer = '';
@@ -166,11 +195,32 @@ export class BridgeDaemonService {
       }, timeoutMs);
 
       child.stdout?.on('data', (data) => {
-        outputBuffer += data.toString();
+        const chunkStr = data.toString();
+        outputBuffer += chunkStr;
+
+        // Emite chunk em tempo real via WebSocket
+        io.to(`project_${request.projectId}`).emit('agent_stream_chunk', {
+          messageId: streamMsgId,
+          projectId: request.projectId,
+          threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+          agentId: request.agentId,
+          chunk: chunkStr,
+          fullText: outputBuffer,
+        });
       });
 
       child.stderr?.on('data', (data) => {
-        outputBuffer += data.toString();
+        const chunkStr = data.toString();
+        outputBuffer += chunkStr;
+
+        io.to(`project_${request.projectId}`).emit('agent_stream_chunk', {
+          messageId: streamMsgId,
+          projectId: request.projectId,
+          threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+          agentId: request.agentId,
+          chunk: chunkStr,
+          fullText: outputBuffer,
+        });
       });
 
       child.on('error', (err) => {

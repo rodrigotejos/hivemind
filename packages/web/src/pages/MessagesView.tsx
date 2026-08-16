@@ -12,7 +12,8 @@ import {
   Plus, 
   Layers, 
   MessageSquare,
-  Cpu
+  Cpu,
+  Bot
 } from 'lucide-react';
 import MessageBubble from '../components/MessageBubble';
 import BlockerAlert from '../components/BlockerAlert';
@@ -31,6 +32,18 @@ export default function MessagesView() {
   const [, setSocket] = useState<Socket | null>(null);
   const [input, setInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<any>(null);
+  
+  interface ActiveStream {
+    messageId: string;
+    agentId: string;
+    agentRole: string;
+    threadId?: string;
+    fullText: string;
+    status: 'streaming' | 'completed' | 'error';
+  }
+
+  const [activeStreams, setActiveStreams] = useState<Record<string, ActiveStream>>({});
+  const [activeAgentStatus, setActiveAgentStatus] = useState<any>(null);
   
   // Modal de Criação de Tarefa
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -84,6 +97,61 @@ export default function MessagesView() {
       setSessions(prev => prev.map(s => s.id === session.id ? session : s));
     });
 
+    // Eventos de Streaming de Agentes em Tempo Real
+    newSocket.on('agent_stream_start', (data) => {
+      setActiveStreams(prev => ({
+        ...prev,
+        [data.messageId]: {
+          messageId: data.messageId,
+          agentId: data.agentId,
+          agentRole: data.agentRole,
+          threadId: data.threadId,
+          fullText: data.initialText || '',
+          status: 'streaming',
+        }
+      }));
+    });
+
+    newSocket.on('agent_stream_chunk', (data) => {
+      setActiveStreams(prev => {
+        if (!prev[data.messageId]) return prev;
+        return {
+          ...prev,
+          [data.messageId]: {
+            ...prev[data.messageId],
+            fullText: data.fullText,
+          }
+        };
+      });
+    });
+
+    newSocket.on('agent_stream_end', (data) => {
+      setActiveStreams(prev => {
+        const next = { ...prev };
+        delete next[data.messageId];
+        return next;
+      });
+    });
+
+    newSocket.on('agent_stream_error', (data) => {
+      setActiveStreams(prev => {
+        const next = { ...prev };
+        delete next[data.messageId];
+        return next;
+      });
+    });
+
+    newSocket.on('agent_step_started', (data) => {
+      setActiveAgentStatus(data);
+    });
+
+    newSocket.on('graph_state_updated', (data) => {
+      if (data?.status === 'completed') {
+        setActiveAgentStatus(null);
+        setActiveStreams({});
+      }
+    });
+
     return () => {
       newSocket.close();
     };
@@ -110,7 +178,7 @@ export default function MessagesView() {
     if (scrollRef.current) {
       scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
     }
-  }, [messages]);
+  }, [messages, activeStreams]);
 
   const activeBlockers = messages.filter(m => (m.type === 'blocker' || m.priority === 'critical') && m.status !== 'resolved');
 
@@ -352,8 +420,52 @@ export default function MessagesView() {
                   onReply={() => setReplyingTo(msg)}
                 />
               ))}
+
+              {/* Live Streaming Message Bubbles (Token/Chunk em Tempo Real) */}
+              {Object.values(activeStreams)
+                .filter(stream => !stream.threadId || stream.threadId === activeSessionId || activeSessionId === 'all')
+                .map(stream => (
+                  <div key={stream.messageId} className="flex gap-4 items-start animate-fade-in">
+                    <div className="w-9 h-9 rounded-2xl bg-zinc-900 border border-indigo-500/50 flex items-center justify-center text-indigo-400 font-bold text-xs shrink-0 shadow-lg relative">
+                      <Bot size={18} className="animate-pulse" />
+                      <span className="absolute -top-1 -right-1 w-2.5 h-2.5 bg-amber-400 rounded-full border-2 border-zinc-950 animate-ping"></span>
+                    </div>
+
+                    <div className="flex-1 space-y-1.5 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-semibold text-xs text-zinc-200">
+                          {agentMap[stream.agentId] || stream.agentId}
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
+                          {stream.agentRole || 'agente'}
+                        </span>
+                        <span className="text-[10px] text-amber-400 flex items-center gap-1.5 font-mono">
+                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
+                          Escrevendo em tempo real...
+                        </span>
+                      </div>
+
+                      <div className="p-4 rounded-2xl bg-zinc-900/90 border border-indigo-500/30 text-zinc-200 text-xs shadow-xl backdrop-blur-md relative overflow-hidden font-mono whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto custom-scrollbar">
+                        {stream.fullText || 'Iniciando análise no repositório...'}
+                        <span className="inline-block w-2 h-3.5 bg-indigo-400 ml-1 animate-pulse align-middle"></span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
               
-              {messages.length === 0 && (
+              {/* Indicador quando agente está ativo mas ainda não gerou stream */}
+              {activeAgentStatus && Object.keys(activeStreams).length === 0 && (
+                <div className="flex items-center gap-3 p-3 bg-zinc-900/60 border border-indigo-500/20 rounded-2xl animate-pulse max-w-md">
+                  <div className="w-7 h-7 rounded-xl bg-indigo-500/10 border border-indigo-500/30 flex items-center justify-center text-indigo-400 shrink-0">
+                    <Bot size={14} className="animate-spin" />
+                  </div>
+                  <div className="text-xs text-zinc-300">
+                    <span className="font-semibold text-white">{activeAgentStatus.agentId}</span> está inspecionando o repositório...
+                  </div>
+                </div>
+              )}
+              
+              {messages.length === 0 && Object.keys(activeStreams).length === 0 && !activeAgentStatus && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
                     <Terminal size={22} className="text-zinc-600" />

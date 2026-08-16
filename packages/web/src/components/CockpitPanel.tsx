@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Play, AlertTriangle, ShieldCheck, CloudUpload, Activity, Coins, CheckCircle, RefreshCw, Cpu, Sparkles } from 'lucide-react';
+import { io } from 'socket.io-client';
 
 interface CockpitPanelProps {
   projectId: string;
@@ -58,8 +59,12 @@ export default function CockpitPanel({
     fetch(url)
       .then(res => res.json())
       .then(data => {
-        if (data.state) setGraphState(data.state);
-        else setGraphState(null);
+        if (data.state) {
+          setGraphState(data.state);
+          if (data.state.status === 'completed' || data.state.status === 'waiting_human') {
+            setIsLoading(false);
+          }
+        }
       })
       .catch(() => {});
   };
@@ -76,12 +81,35 @@ export default function CockpitPanel({
   useEffect(() => {
     fetchGraphState();
     fetchTelemetry();
+
+    const socket = io(apiUrl);
+    socket.emit('join_project', { projectId });
+
+    socket.on('graph_state_updated', (data) => {
+      if (data.graphState) setGraphState(data.graphState);
+      else if (data.status) setGraphState(data);
+      setIsLoading(false);
+    });
+
+    socket.on('agent_step_started', (data) => {
+      setGraphState((prev: any) => ({
+        ...(prev || {}),
+        status: 'running',
+        currentAgent: data.agentId,
+      }));
+      setIsLoading(false);
+    });
+
     const interval = setInterval(() => {
       fetchGraphState();
       fetchTelemetry();
     }, 3000);
-    return () => clearInterval(interval);
-  }, [projectId, sessionId]);
+
+    return () => {
+      clearInterval(interval);
+      socket.close();
+    };
+  }, [projectId, sessionId, apiUrl]);
 
   const handleStartTask = async () => {
     if (!goalInput.trim()) return;
