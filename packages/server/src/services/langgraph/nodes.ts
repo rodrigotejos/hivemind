@@ -12,14 +12,6 @@ export interface SupervisorDecision {
   interruptPayload?: InterruptPayload;
 }
 
-const AGENT_PERSONAS: Record<string, string> = {
-  'alpha-frontend': 'Você é o Alpha, Engenheiro Frontend Especialista em React 19, Vite, TailwindCSS e Figma. Analise ou crie componentes, tokens de layout e acessibilidade.',
-  'beta-backend': 'Você é o Beta, Engenheiro Backend Especialista em Node.js, Express, TypeScript, SQLite e LangGraph. Analise ou crie rotas REST, models, queries e regras de negócio.',
-  'gamma-qa': 'Você é o Gamma, Especialista em QA e Testes PBT (Property-Based Testing) com fast-check. Analise ou crie testes unitários e garanta que não há regressões.',
-  'delta-security': 'Você é o Delta, Auditor de Segurança e Red Team Adversarial. Analise o código para vulnerabilidades, injeções, vazamentos e conformidade com OWASP.',
-  'epsilon-infra': 'Você é o Epsilon, Especialista em DevOps e Infraestrutura (Docker, S3, Shell e CI/CD). Analise ou crie automações, scripts e backups.',
-};
-
 export async function supervisorNode(state: AgentGraphStateType): Promise<Partial<AgentGraphStateType>> {
   const currentTurns = state.turnCount || 0;
   const maxTurns = state.maxTurns || 5;
@@ -106,29 +98,33 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
 
 export function createAgentWorkerNode(role: AgentRole, agentName: string) {
   return async (state: AgentGraphStateType): Promise<Partial<AgentGraphStateType>> => {
-    const persona = AGENT_PERSONAS[agentName] || `Você é o especialista ${agentName} (${role}).`;
     const project = queries.getProject(state.projectId);
     const projectName = project ? (project as any).name : 'Projeto';
     const projectPath = (project as any)?.path;
+    const targetDir = projectPath || process.cwd();
 
+    // Diretiva de Engenharia Imperativa direta para o Antigravity CLI
     const actionPrompt = `
-${persona}
-Projeto: "${projectName}" (Diretório: ${projectPath || 'Workspace atual'})
-Objetivo técnico da tarefa: "${state.goal}"
+DIRETIVA TÉCNICA DE ENGENHARIA ({role.toUpperCase()} - {agentName}):
+Você é o engenheiro especialista em ${role} atuando no projeto "${projectName}".
+Objetivo da Tarefa: "${state.goal}"
+Diretório do Projeto: "${targetDir}"
 
-Histórico recente:
-${state.messages.slice(-4).map(m => `${m.agentId || m.role}: ${m.content}`).join('\n')}
-
-Instrução:
-Execute a análise técnica ou desenvolvimento correspondente à sua especialidade (${role}). 
-Identifique a estrutura de arquivos, regras de negócio, APIs ou testes necessários. 
-Responda diretamente em português com tom de engenharia de software sênior de forma concisa e estruturada.
+Instruções de Execução Obrigatórias:
+1. Inspecione e analise o código-fonte, manifestos (package.json, tsconfig, etc.) e estrutura de pastas em "${targetDir}".
+2. Execute as ações reais de engenharia necessárias para este objetivo (engenharia reversa, análise arquitetural, geração de documentação ou implementação de código).
+3. Se o objetivo solicitar geração de artefatos de documentação, crie ou atualize os arquivos correspondentes em "${targetDir}".
+4. Apresente um relatório técnico claro, estruturado e aprofundado em Markdown em português com:
+   - 📦 **Mapeamento de Módulos e Dependências**
+   - 🏛️ **Arquitetura e Fluxo de Dados**
+   - 🛠️ **Ações Executadas e Arquivos Criados/Analisados**
+   - 🎯 **Status e Recomendações**
     `.trim();
 
     let agentResponseText = '';
     const resolved = resolveModelConfig(state.model || 'auto', state.goal, state.reasoningLevel || 'medium');
 
-    // 1. Tenta executar via Antigravity CLI (BridgeDaemon) com modelo dinâmico no repositório do projeto
+    // 1. Tenta executar via Antigravity CLI (BridgeDaemon) no repositório do projeto
     try {
       const bridge = BridgeDaemonService.getInstance();
       const cliResult = await bridge.dispatch({
@@ -138,19 +134,23 @@ Responda diretamente em português com tom de engenharia de software sênior de 
         prompt: actionPrompt,
         model: resolved.actualModelName,
         reasoningLevel: resolved.reasoningLevel,
-        cwd: projectPath || undefined,
+        cwd: targetDir,
         threadId: state.sessionId,
-        timeoutMs: 180000,
+        timeoutMs: 300000,
       });
 
       if (cliResult && cliResult.success && cliResult.output.trim()) {
-        agentResponseText = cliResult.output.trim();
+        const out = cliResult.output.trim();
+        // Garante que não é apenas uma saudação genérica
+        if (!out.startsWith('Olá! Sou o Antigravity') || out.length > 200) {
+          agentResponseText = out;
+        }
       }
     } catch (bridgeErr) {
       console.warn(`BridgeDaemon ${agentName} fallback:`, bridgeErr);
     }
 
-    // 2. Se o Bridge CLI não retornou output, invoca o modelo Google Gemini configurado
+    // 2. Se o Bridge CLI não retornou output satisfatório, invoca o modelo Google Gemini configurado
     if (!agentResponseText) {
       const model = getModel(state.model, state.goal, state.reasoningLevel);
       if (model) {
@@ -248,10 +248,11 @@ export async function convergenceNode(state: AgentGraphStateType): Promise<Parti
     } catch (e) {}
   }
 
-  // 3. Atualiza o shared context do projeto (Wiki Técnica)
+  // 3. Atualiza o shared context do projeto (Wiki Técnica) com base no relatório dos agentes
   const project = queries.getProject(state.projectId);
   if (project) {
-    const summary = `### Resumo da Tarefa Concluída: ${state.goal}\n- Agentes participantes: ${Array.from(new Set(state.messages.map(m => m.agentId).filter(Boolean))).join(', ')}\n- Rodadas executadas: ${state.turnCount}\n- Status: 100% Convergido.`;
+    const combinedAnalysis = state.messages.map(m => m.content).filter(c => c && !c.startsWith('🎯')).join('\n\n');
+    const summary = `### Resumo da Tarefa Concluída: ${state.goal}\n- Agentes participantes: ${Array.from(new Set(state.messages.map(m => m.agentId).filter(Boolean))).join(', ')}\n\n${combinedAnalysis}`;
     const updatedContext = await updateSharedContext((project as any).shared_context || '', summary, state.model);
     queries.updateProjectContext(state.projectId, updatedContext);
     io.to(`project_${state.projectId}`).emit('project_updated', { project: queries.getProject(state.projectId) });

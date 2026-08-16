@@ -122,28 +122,21 @@ export class BridgeDaemonService {
 
   private executeSubprocess(request: CLIExecutionRequest): Promise<{ output: string; tokensUsed?: { prompt: number; completion: number } }> {
     return new Promise((resolve, reject) => {
-      const timeoutMs = request.timeoutMs || 180000; // 3 min
+      const timeoutMs = request.timeoutMs || 300000; // 5 min timeout
       let outputBuffer = '';
       let isSettled = false;
 
-      // Executa o Antigravity CLI (agy) com o modelo dinamicamente resolvido pelo gerenciador
+      const workingDir = request.cwd || process.cwd();
+
+      // Executa o Antigravity CLI (agy) com o workspace do repositório
       const args = [
         '-p', request.prompt,
+        '--add-dir', workingDir,
         '--dangerously-skip-permissions',
       ];
 
-      if (request.model) {
-        args.push('--model', request.model);
-      }
-
-      if (request.cwd) {
-        args.push('--add-dir', request.cwd);
-      }
-
       const sanitizedEnv = { ...process.env };
       delete sanitizedEnv.NODE_DEBUG;
-
-      const workingDir = request.cwd || process.cwd();
 
       const child = spawn('agy', args, {
         cwd: workingDir,
