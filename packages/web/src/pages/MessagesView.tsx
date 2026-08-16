@@ -36,8 +36,8 @@ export default function MessagesView() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [newTitle, setNewTitle] = useState('');
   const [newGoal, setNewGoal] = useState('');
-  const [newModel, setNewModel] = useState('auto');
-  const [newReasoningLevel, setNewReasoningLevel] = useState('medium');
+  const [newModel, setNewModel] = useState('gemini-3.7-flash');
+  const [newReasoningLevel, setNewReasoningLevel] = useState('low');
   
   const scrollRef = useRef<HTMLDivElement>(null);
 

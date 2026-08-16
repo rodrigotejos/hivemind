@@ -143,11 +143,11 @@ export function createTaskSession(
   projectId: string, 
   title: string, 
   goal?: string, 
-  model: string = 'auto',
-  reasoningLevel: string = 'medium'
+  model: string = 'gemini-3.7-flash',
+  reasoningLevel: string = 'low'
 ) {
   const stmt = db.prepare('INSERT INTO task_sessions (project_id, title, goal, model, reasoning_level, status) VALUES (?, ?, ?, ?, ?, ?) RETURNING *');
-  return stmt.get(projectId, title, goal || null, model || 'auto', reasoningLevel || 'medium', 'active');
+  return stmt.get(projectId, title, goal || null, model || 'gemini-3.7-flash', reasoningLevel || 'low', 'active');
 }
 
 export function getProjectTaskSessions(projectId: string) {

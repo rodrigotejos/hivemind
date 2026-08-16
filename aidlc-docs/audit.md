@@ -104,6 +104,12 @@
 **AI Response**: "Investigated and identified root cause: LangGraph agent worker nodes were executing without real Gemini model synthesis, failing to persist generated messages to SQLite and broadcast via Socket.IO, and looping rapidly into the 5-turn anti-loop guard. Implementing real AI agent worker execution, database message persistence linked to session thread_id, live Socket.IO broadcasting, and dynamic multi-agent pipeline convergence."
 **Context**: Bugfix & Autonomous Execution Engine Implementation.
 
+## Default Model & Reasoning Configuration: Gemini 3.7 Flash with Low Reasoning
+**Timestamp**: 2026-08-15T22:52:28-03:00
+**User Input**: "viq ue nao tem isso deixa no 3.7 flash low."
+**AI Response**: "Configured global defaults across Cockpit, Task Sessions, AI Manager, LangGraph and Antigravity execution to Gemini 3.7 Flash with Reasoning: Low (~2k tokens budget)."
+**Context**: Configuration Update - Default Model & Reasoning Budget.
+
 ---
 
 

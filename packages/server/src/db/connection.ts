@@ -29,8 +29,8 @@ export function initDb() {
         project_id TEXT NOT NULL REFERENCES projects(id),
         title TEXT NOT NULL,
         goal TEXT,
-        model TEXT DEFAULT 'auto',
-        reasoning_level TEXT DEFAULT 'medium',
+        model TEXT DEFAULT 'gemini-3.7-flash',
+        reasoning_level TEXT DEFAULT 'low',
         status TEXT DEFAULT 'active',
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
         updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -40,11 +40,11 @@ export function initDb() {
   } catch (e) {}
 
   try {
-    db.exec("ALTER TABLE task_sessions ADD COLUMN model TEXT DEFAULT 'auto'");
+    db.exec("ALTER TABLE task_sessions ADD COLUMN model TEXT DEFAULT 'gemini-3.7-flash'");
   } catch (e) {}
 
   try {
-    db.exec("ALTER TABLE task_sessions ADD COLUMN reasoning_level TEXT DEFAULT 'medium'");
+    db.exec("ALTER TABLE task_sessions ADD COLUMN reasoning_level TEXT DEFAULT 'low'");
   } catch (e) {}
 
   // Seed baseline agents if empty
