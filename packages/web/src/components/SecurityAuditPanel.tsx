@@ -6,9 +6,12 @@ import {
   CheckCircle, 
   RefreshCw, 
   Terminal, 
-  Activity
+  Activity,
+  Bot,
+  Send
 } from 'lucide-react';
 import { io } from 'socket.io-client';
+import GitDiffModal from './GitDiffModal';
 
 export interface SecurityFinding {
   id: string;
@@ -34,6 +37,16 @@ export interface SecuritySummary {
   findings: SecurityFinding[];
 }
 
+export interface RemediationProgress {
+  step: number;
+  totalSteps: number;
+  agentRole: string;
+  agentName: string;
+  percent: number;
+  status: string;
+  error?: boolean;
+}
+
 interface SecurityAuditPanelProps {
   projectId: string;
   apiUrl: string;
@@ -46,6 +59,9 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
+  const [remediating, setRemediating] = useState<Record<string, RemediationProgress>>({});
+  const [remediationCompleted, setRemediationCompleted] = useState<Record<string, { diff: string; suggestedCommitMessage: string }>>({});
+  const [diffModalData, setDiffModalData] = useState<{ diff: string; message: string } | null>(null);
 
   const fetchSecurityData = async () => {
     try {
@@ -73,6 +89,43 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
       }
     });
 
+    socket.on('remediation_progress', (data) => {
+      if (data.findingId) {
+        setRemediating(prev => ({
+          ...prev,
+          [data.findingId]: {
+            step: data.step,
+            totalSteps: data.totalSteps || 3,
+            agentRole: data.agentRole,
+            agentName: data.agentName,
+            percent: data.percent,
+            status: data.status,
+            error: data.error,
+          }
+        }));
+      }
+    });
+
+    socket.on('remediation_completed', (data) => {
+      if (data.findingId) {
+        setRemediationCompleted(prev => ({
+          ...prev,
+          [data.findingId]: {
+            diff: data.diff,
+            suggestedCommitMessage: data.suggestedCommitMessage,
+          }
+        }));
+        setRemediating(prev => {
+          const next = { ...prev };
+          delete next[data.findingId];
+          return next;
+        });
+        if (data.summary) {
+          setSummary(data.summary);
+        }
+      }
+    });
+
     return () => {
       socket.close();
     };
@@ -93,6 +146,31 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
     } catch (e) {
       console.error('Falha ao disparar scan:', e);
       setScanning(false);
+    }
+  };
+
+  const handleStartRemediation = async (findingId: string) => {
+    // Inicializa status bar imediatamente
+    setRemediating(prev => ({
+      ...prev,
+      [findingId]: {
+        step: 1,
+        totalSteps: 3,
+        agentRole: 'backend',
+        agentName: 'Beta (Backend - Blue Team)',
+        percent: 15,
+        status: 'Iniciando agentes para auto-remediação...',
+      }
+    }));
+    setExpandedFindings(prev => ({ ...prev, [findingId]: true }));
+
+    try {
+      await fetch(`${apiUrl}/api/projects/${projectId}/security/findings/${findingId}/remediate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      console.error('Falha ao disparar auto-remediação:', e);
     }
   };
 
@@ -294,6 +372,9 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
           ) : (
             findings.map(finding => {
               const isExpanded = expandedFindings[finding.id] ?? true;
+              const isRemediating = !!remediating[finding.id];
+              const remProgress = remediating[finding.id];
+              const remCompleted = remediationCompleted[finding.id];
 
               const severityBadge = 
                 finding.severity === 'critical' ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' :
@@ -310,7 +391,9 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
               return (
                 <div 
                   key={finding.id}
-                  className="bg-zinc-950/80 border border-zinc-800/90 rounded-xl overflow-hidden transition-all hover:border-zinc-700/80"
+                  className={`bg-zinc-950/80 border rounded-xl overflow-hidden transition-all ${
+                    isRemediating ? 'border-cyan-500/60 ring-1 ring-cyan-500/30 shadow-[0_0_20px_rgba(6,182,212,0.15)]' : 'border-zinc-800/90 hover:border-zinc-700/80'
+                  }`}
                 >
                   <div 
                     onClick={() => toggleExpand(finding.id)}
@@ -343,6 +426,91 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
 
                   {isExpanded && (
                     <div className="p-4 border-t border-zinc-800/80 bg-zinc-950/40 space-y-4">
+                      {/* BARRA DE STATUS / PROGRESSO EMBUTIDA */}
+                      {isRemediating && remProgress && (
+                        <div className="bg-gradient-to-r from-cyan-950/30 via-indigo-950/30 to-purple-950/30 border border-cyan-500/40 rounded-xl p-4 space-y-3 animate-pulse">
+                          <div className="flex items-center justify-between text-xs">
+                            <div className="flex items-center gap-2">
+                              <Bot size={16} className="text-cyan-400 animate-bounce" />
+                              <span className="font-bold text-white">
+                                Agente Ativo: <strong className="text-cyan-300 font-mono">{remProgress.agentName}</strong>
+                              </span>
+                            </div>
+                            <span className="text-cyan-400 font-mono font-bold text-xs">
+                              {remProgress.percent}% (Etapa {remProgress.step}/{remProgress.totalSteps})
+                            </span>
+                          </div>
+
+                          {/* Steps Pills */}
+                          <div className="grid grid-cols-3 gap-2 text-[10px] font-semibold">
+                            <div className={`p-1.5 rounded-lg border text-center ${
+                              remProgress.step >= 1 ? 'bg-cyan-500/20 text-cyan-300 border-cyan-500/40' : 'bg-zinc-900/40 text-zinc-600 border-zinc-800'
+                            }`}>
+                              1. 🔵 Blue Team (Patch)
+                            </div>
+                            <div className={`p-1.5 rounded-lg border text-center ${
+                              remProgress.step >= 2 ? 'bg-rose-500/20 text-rose-300 border-rose-500/40' : 'bg-zinc-900/40 text-zinc-600 border-zinc-800'
+                            }`}>
+                              2. 🔴 Red Team (Re-Audit)
+                            </div>
+                            <div className={`p-1.5 rounded-lg border text-center ${
+                              remProgress.step >= 3 ? 'bg-purple-500/20 text-purple-300 border-purple-500/40' : 'bg-zinc-900/40 text-zinc-600 border-zinc-800'
+                            }`}>
+                              3. 🟣 QA (Integridade)
+                            </div>
+                          </div>
+
+                          {/* Progress Track */}
+                          <div className="w-full bg-zinc-900 rounded-full h-2 overflow-hidden border border-zinc-800">
+                            <div 
+                              className="bg-gradient-to-r from-cyan-500 via-indigo-500 to-purple-500 h-full rounded-full transition-all duration-500"
+                              style={{ width: `${remProgress.percent}%` }}
+                            ></div>
+                          </div>
+
+                          <p className="text-[11px] text-zinc-300 font-mono">
+                            ⚡ {remProgress.status}
+                          </p>
+                        </div>
+                      )}
+
+                      {/* CARD DE SUCESSO DA REMEDIAÇÃO + BOTÕES GIT */}
+                      {remCompleted && (
+                        <div className="bg-emerald-950/20 border border-emerald-500/40 rounded-xl p-4 space-y-3">
+                          <div className="flex items-center justify-between flex-wrap gap-2">
+                            <div className="flex items-center gap-2 text-emerald-300 text-xs font-bold">
+                              <CheckCircle size={16} />
+                              <span>✓ Correção validada pelo Red Team & QA! Código pronto para commit.</span>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => setDiffModalData({
+                                  diff: remCompleted.diff,
+                                  message: remCompleted.suggestedCommitMessage,
+                                })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-zinc-800 hover:bg-zinc-700 text-white rounded-lg text-xs font-semibold transition-all border border-zinc-700"
+                              >
+                                <Terminal size={13} className="text-cyan-400" />
+                                Visualizar Git Diff
+                              </button>
+
+                              <button
+                                onClick={() => setDiffModalData({
+                                  diff: remCompleted.diff,
+                                  message: remCompleted.suggestedCommitMessage,
+                                })}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs font-bold transition-all shadow-sm"
+                              >
+                                <Send size={13} />
+                                Subir Commit Automático
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Comparativo de Ataque vs. Defesa */}
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         {/* Red Team Attack Vector */}
                         <div className="bg-rose-950/20 border border-rose-900/30 rounded-xl p-3.5 space-y-2">
@@ -367,30 +535,53 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
                         </div>
                       </div>
 
-                      {/* Ações de Transição de Status */}
-                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50 flex-wrap gap-2">
+                      {/* Ações de Transição de Status e Botão Auto-Remediar */}
+                      <div className="flex items-center justify-between pt-2 border-t border-zinc-800/50 flex-wrap gap-3">
                         <span className="text-[11px] text-zinc-500">
                           Identificado em: {new Date(finding.created_at).toLocaleString('pt-BR')}
                         </span>
 
-                        <div className="flex items-center gap-2">
-                          {finding.status !== 'mitigated' && (
-                            <button
-                              onClick={() => handleUpdateStatus(finding.id, 'mitigated')}
-                              className="px-3 py-1 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-medium transition-all"
-                            >
-                              Marcar como Mitigado (Blue Team)
-                            </button>
-                          )}
+                        <div className="flex items-center gap-2 flex-wrap">
+                          {/* BOTÃO PRINCIPAL: CORRIGIR COM AGENTES */}
                           {finding.status !== 'verified' && (
                             <button
+                              onClick={() => handleStartRemediation(finding.id)}
+                              disabled={isRemediating}
+                              className="flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-cyan-600 to-indigo-600 hover:from-cyan-500 hover:to-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-bold transition-all shadow-[0_0_12px_rgba(6,182,212,0.3)]"
+                            >
+                              {isRemediating ? (
+                                <>
+                                  <RefreshCw size={13} className="animate-spin" />
+                                  Corrigindo em Background...
+                                </>
+                              ) : (
+                                <>
+                                  <Bot size={14} />
+                                  🤖 Corrigir com Agentes (Blue + Red Team)
+                                </>
+                              )}
+                            </button>
+                          )}
+
+                          {finding.status !== 'mitigated' && !isRemediating && (
+                            <button
+                              onClick={() => handleUpdateStatus(finding.id, 'mitigated')}
+                              className="px-3 py-1.5 bg-cyan-600/20 hover:bg-cyan-600/30 text-cyan-300 border border-cyan-500/30 rounded-lg text-xs font-medium transition-all"
+                            >
+                              Marcar como Mitigado
+                            </button>
+                          )}
+
+                          {finding.status !== 'verified' && !isRemediating && (
+                            <button
                               onClick={() => handleUpdateStatus(finding.id, 'verified')}
-                              className="px-3 py-1 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-medium transition-all"
+                              className="px-3 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 border border-emerald-500/30 rounded-lg text-xs font-medium transition-all"
                             >
                               ✓ Validar como Seguro
                             </button>
                           )}
-                          {finding.status !== 'open' && (
+
+                          {finding.status !== 'open' && !isRemediating && (
                             <button
                               onClick={() => handleUpdateStatus(finding.id, 'open')}
                               className="px-2.5 py-1 text-zinc-400 hover:text-zinc-200 text-xs transition-all"
@@ -408,6 +599,20 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
           )}
         </div>
       </div>
+
+      {/* MODAL DE GIT DIFF E COMMIT */}
+      {diffModalData && (
+        <GitDiffModal
+          projectId={projectId}
+          apiUrl={apiUrl}
+          diff={diffModalData.diff}
+          suggestedCommitMessage={diffModalData.message}
+          onClose={() => setDiffModalData(null)}
+          onCommitSuccess={() => {
+            fetchSecurityData();
+          }}
+        />
+      )}
     </div>
   );
 }
