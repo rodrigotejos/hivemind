@@ -4,6 +4,7 @@ import { ArrowLeft, BrainCircuit, Users, Terminal, Sparkles, ShieldCheck } from 
 import AgentStatus from '../components/AgentStatus';
 import CockpitPanel from '../components/CockpitPanel';
 import SecurityAuditPanel from '../components/SecurityAuditPanel';
+import FigmaStudioPanel from '../components/FigmaStudioPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -11,7 +12,7 @@ export default function ProjectView() {
   const { id } = useParams();
   const [project, setProject] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
-  const [activeTab, setActiveTab] = useState<'overview' | 'security'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'security' | 'figma'>('overview');
 
   useEffect(() => {
     fetch(`${API_URL}/api/projects/${id}`)
@@ -60,7 +61,7 @@ export default function ProjectView() {
       <CockpitPanel projectId={id || ''} apiUrl={API_URL} />
 
       {/* Navegação de Abas do Projeto */}
-      <div className="flex items-center gap-3 border-b border-zinc-800 pb-2">
+      <div className="flex items-center gap-3 border-b border-zinc-800 pb-2 flex-wrap">
         <button
           onClick={() => setActiveTab('overview')}
           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
@@ -85,6 +86,21 @@ export default function ProjectView() {
           Auditoria Red Team vs. Blue Team
           <span className="px-1.5 py-0.2 bg-rose-500/20 text-rose-300 text-[10px] rounded-full font-bold">
             Adversarial
+          </span>
+        </button>
+
+        <button
+          onClick={() => setActiveTab('figma')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'figma'
+              ? 'bg-zinc-800 text-white border border-cyan-500/40 shadow-sm'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+          }`}
+        >
+          <Sparkles size={16} className={activeTab === 'figma' ? 'text-cyan-400' : 'text-zinc-500'} />
+          Figma Studio & Gerador UI
+          <span className="px-1.5 py-0.2 bg-cyan-500/20 text-cyan-300 text-[10px] rounded-full font-bold">
+            Alpha Frontend
           </span>
         </button>
       </div>
@@ -136,8 +152,10 @@ export default function ProjectView() {
             </div>
           </div>
         </div>
-      ) : (
+      ) : activeTab === 'security' ? (
         <SecurityAuditPanel projectId={id || ''} apiUrl={API_URL} />
+      ) : (
+        <FigmaStudioPanel projectId={id || ''} apiUrl={API_URL} />
       )}
     </div>
   );

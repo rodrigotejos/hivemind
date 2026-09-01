@@ -282,6 +282,77 @@ export async function expandContextWithRealData(currentContext: string, analysis
   }
 }
 
+export async function generateUIComponent(
+  componentName: string,
+  userPrompt: string,
+  designTokens: any,
+  modelName: string = 'gemini-flex'
+): Promise<string> {
+  const model = getModel(modelName, userPrompt, 'medium');
+
+  const systemInstructions = `Você é o Alpha (Frontend), especialista em desenvolvimento de interfaces modernas com React 19, TypeScript e TailwindCSS.
+Sua missão é gerar um componente React 19 completo, auto-contido, interativo e visualmente deslumbrante no padrão Dark Mode Glassmorphism com TailwindCSS.
+
+REGRAS DE CÓDIGO OBRIGATÓRIAS:
+1. Exportação como função padrão com o nome exato: "export function ${componentName}() { ... }".
+2. Não use imports externos não padrão. Use ícones do 'lucide-react' (como Sparkles, Star, MapPin, Heart, ArrowRight, Check, Shield, Activity) ou SVGs inline.
+3. Utilize TailwindCSS moderno (bg-zinc-950, text-white, border-zinc-800, gradientes indigo/cyan, backdrop-blur).
+4. Inclua estados interativos com useState (ex: favoritos, contadores, tabs ou botão de reserva interativo).
+5. Responda APENAS com o bloco de código TypeScript/TSX delimitado por \`\`\`tsx e \`\`\`. Sem explicações desnecessárias fora do bloco.`;
+
+  const prompt = PromptTemplate.fromTemplate(`
+    {systemInstructions}
+
+    Nome do Componente: {componentName}
+    Especificação / Descrição da UI: {userPrompt}
+    Design Tokens do Figma: {designTokens}
+  `);
+
+  if (!model) {
+    return `import { useState } from 'react';
+import { Sparkles, Star, Check, ArrowRight } from 'lucide-react';
+
+export function ${componentName}() {
+  const [reserved, setReserved] = useState(false);
+
+  return (
+    <div className="max-w-md w-full p-6 rounded-2xl bg-zinc-950/90 border border-zinc-800 shadow-2xl backdrop-blur-xl space-y-4">
+      <div className="relative overflow-hidden rounded-xl h-44 bg-gradient-to-tr from-indigo-950 via-purple-950 to-cyan-950 flex items-center justify-center border border-white/10">
+        <Sparkles className="text-cyan-400 animate-pulse" size={40} />
+        <span className="absolute top-3 right-3 px-2.5 py-1 bg-emerald-500 text-white text-[10px] font-bold rounded-full">
+          20% OFF
+        </span>
+      </div>
+      <div>
+        <h4 className="text-lg font-bold text-white tracking-tight">${componentName}</h4>
+        <p className="text-xs text-zinc-400 mt-1">Componente gerado pelo Alpha Frontend em conformidade com o AI-DLC.</p>
+      </div>
+      <button 
+        onClick={() => setReserved(!reserved)}
+        className="w-full py-2.5 bg-gradient-to-r from-indigo-600 to-cyan-600 text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
+      >
+        {reserved ? '✓ Reservado com Sucesso' : 'Confirmar Reserva'}
+      </button>
+    </div>
+  );
+}`;
+  }
+
+  try {
+    const chain = prompt.pipe(model as any);
+    const result = await chain.invoke({
+      systemInstructions,
+      componentName,
+      userPrompt: userPrompt || 'Card de UI interativo para travel_fun',
+      designTokens: JSON.stringify(designTokens || {}),
+    });
+    return (result as any).content as string;
+  } catch (err) {
+    console.error('AI Generate UI Error:', err);
+    throw err;
+  }
+}
+
 export async function updateSharedContext(currentContext: string, newUpdates: string, modelName?: string): Promise<string> {
   const model = getModel(modelName, newUpdates);
   if (!model) return currentContext + '\n\n### Novos Updates:\n' + newUpdates;

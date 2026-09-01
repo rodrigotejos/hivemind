@@ -136,6 +136,24 @@ export function initDb() {
     }
   } catch (e) {}
 
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS ui_components (
+        id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        project_id      TEXT NOT NULL REFERENCES projects(id),
+        name            TEXT NOT NULL,
+        source_type     TEXT NOT NULL,
+        source_input    TEXT,
+        design_tokens   TEXT,
+        component_code  TEXT NOT NULL,
+        file_path       TEXT,
+        created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_ui_components_project ON ui_components(project_id, created_at);
+    `);
+  } catch (e) {}
+
   // Seed baseline agents if empty
   try {
     const agents = [

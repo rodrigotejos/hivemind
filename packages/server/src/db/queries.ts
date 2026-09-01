@@ -276,6 +276,45 @@ export function deleteSecurityFinding(id: string) {
   return db.prepare('DELETE FROM security_findings WHERE id = ?').run(id);
 }
 
+// UI Components Queries
+export function getProjectUIComponents(projectId: string): any[] {
+  return db.prepare('SELECT * FROM ui_components WHERE project_id = ? ORDER BY created_at DESC').all(projectId) as any[];
+}
+
+export function getUIComponent(id: string): any {
+  return db.prepare('SELECT * FROM ui_components WHERE id = ?').get(id);
+}
+
+export function createUIComponent(data: {
+  projectId: string;
+  name: string;
+  sourceType: string;
+  sourceInput?: string;
+  designTokens?: string;
+  componentCode: string;
+  filePath?: string;
+}) {
+  const stmt = db.prepare(`
+    INSERT INTO ui_components (project_id, name, source_type, source_input, design_tokens, component_code, file_path)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+    RETURNING *
+  `);
+  return stmt.get(
+    data.projectId,
+    data.name,
+    data.sourceType,
+    data.sourceInput || null,
+    data.designTokens || null,
+    data.componentCode,
+    data.filePath || null
+  );
+}
+
+export function deleteUIComponent(id: string) {
+  return db.prepare('DELETE FROM ui_components WHERE id = ?').run(id);
+}
+
+
 
 
 

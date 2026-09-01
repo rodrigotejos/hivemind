@@ -97,3 +97,19 @@ CREATE TABLE IF NOT EXISTS security_findings (
 
 CREATE INDEX IF NOT EXISTS idx_security_project ON security_findings(project_id, status);
 
+CREATE TABLE IF NOT EXISTS ui_components (
+  id              TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  project_id      TEXT NOT NULL REFERENCES projects(id),
+  name            TEXT NOT NULL,
+  source_type     TEXT NOT NULL, -- figma_url | prompt | tokens
+  source_input    TEXT,
+  design_tokens   TEXT,          -- JSON string with colors, typography, spacing
+  component_code  TEXT NOT NULL, -- React 19 + TypeScript + Tailwind
+  file_path       TEXT,
+  created_at      DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at      DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_ui_components_project ON ui_components(project_id, created_at);
+
+
