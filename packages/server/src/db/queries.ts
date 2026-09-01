@@ -165,5 +165,117 @@ export function updateTaskSession(id: string, updates: Partial<{ title: string; 
   return getTaskSession(id);
 }
 
+export interface SecurityFinding {
+  id: string;
+  project_id: string;
+  session_id?: string;
+  title: string;
+  category: string;
+  severity: 'critical' | 'high' | 'medium' | 'low' | 'info';
+  red_team_details?: string;
+  blue_team_mitigation?: string;
+  status: 'open' | 'mitigating' | 'mitigated' | 'verified';
+  affected_file?: string;
+  created_at: string;
+  updated_at: string;
+}
+
+export function getProjectSecurityFindings(projectId: string, status?: string): SecurityFinding[] {
+  if (status && status !== 'all') {
+    return db.prepare('SELECT * FROM security_findings WHERE project_id = ? AND status = ? ORDER BY created_at DESC').all(projectId, status) as any[];
+  }
+  return db.prepare('SELECT * FROM security_findings WHERE project_id = ? ORDER BY created_at DESC').all(projectId) as any[];
+}
+
+export function getProjectSecuritySummary(projectId: string) {
+  const findings = getProjectSecurityFindings(projectId);
+
+  let deductions = 0;
+  const severityCounts = { critical: 0, high: 0, medium: 0, low: 0, info: 0 };
+  const statusCounts = { open: 0, mitigating: 0, mitigated: 0, verified: 0 };
+
+  for (const f of findings) {
+    if (severityCounts[f.severity] !== undefined) severityCounts[f.severity]++;
+    if (statusCounts[f.status] !== undefined) statusCounts[f.status]++;
+
+    if (f.status === 'open') {
+      if (f.severity === 'critical') deductions += 25;
+      else if (f.severity === 'high') deductions += 15;
+      else if (f.severity === 'medium') deductions += 8;
+      else if (f.severity === 'low') deductions += 3;
+    } else if (f.status === 'mitigating') {
+      if (f.severity === 'critical') deductions += 12;
+      else if (f.severity === 'high') deductions += 7;
+      else if (f.severity === 'medium') deductions += 4;
+      else if (f.severity === 'low') deductions += 1;
+    }
+  }
+
+  const score = Math.max(0, Math.min(100, 100 - deductions));
+  const rating = 
+    score >= 95 ? 'A+' :
+    score >= 85 ? 'A' :
+    score >= 75 ? 'B' :
+    score >= 60 ? 'C' : 'F';
+
+  return {
+    score,
+    rating,
+    totalFindings: findings.length,
+    severityCounts,
+    statusCounts,
+    findings,
+  };
+}
+
+export function createSecurityFinding(data: {
+  projectId: string;
+  sessionId?: string;
+  title: string;
+  category: string;
+  severity: string;
+  redTeamDetails?: string;
+  blueTeamMitigation?: string;
+  status?: string;
+  affectedFile?: string;
+}) {
+  const stmt = db.prepare(`
+    INSERT INTO security_findings (project_id, session_id, title, category, severity, red_team_details, blue_team_mitigation, status, affected_file)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+    RETURNING *
+  `);
+  return stmt.get(
+    data.projectId,
+    data.sessionId || null,
+    data.title,
+    data.category,
+    data.severity,
+    data.redTeamDetails || null,
+    data.blueTeamMitigation || null,
+    data.status || 'open',
+    data.affectedFile || null
+  );
+}
+
+export function updateSecurityFinding(id: string, updates: Partial<{
+  title: string;
+  category: string;
+  severity: string;
+  red_team_details: string;
+  blue_team_mitigation: string;
+  status: string;
+  affected_file: string;
+}>) {
+  const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
+  const values = Object.values(updates);
+  db.prepare(`UPDATE security_findings SET ${setClauses}, updated_at = CURRENT_TIMESTAMP WHERE id = ?`).run(...values, id);
+  return db.prepare('SELECT * FROM security_findings WHERE id = ?').get(id);
+}
+
+export function deleteSecurityFinding(id: string) {
+  return db.prepare('DELETE FROM security_findings WHERE id = ?').run(id);
+}
+
+
 
 

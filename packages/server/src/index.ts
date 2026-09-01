@@ -30,6 +30,7 @@ import { telemetryRouter } from './routes/telemetry';
 import { setupRouter } from './routes/setup';
 import { snapshotRouter } from './routes/snapshots';
 import { sessionsRouter } from './routes/sessions';
+import { securityRouter } from './routes/security';
 
 app.set('io', io); // Allow routes to access io
 
@@ -43,6 +44,7 @@ app.use('/api', telemetryRouter);
 app.use('/api', setupRouter);
 app.use('/api', snapshotRouter);
 app.use('/api', sessionsRouter);
+app.use('/api', securityRouter);
 app.use('/api/projects', orchestratorRouter);
 app.use('/api/projects', projectsRouter);
 app.use('/api/agents', agentsRouter);

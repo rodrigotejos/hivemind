@@ -204,6 +204,32 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
       }
     }
 
+    if (role === 'security' && agentResponseText) {
+      try {
+        const textLower = agentResponseText.toLowerCase();
+        const severity = 
+          textLower.includes('crítico') || textLower.includes('critical') ? 'critical' :
+          textLower.includes('alto') || textLower.includes('high') ? 'high' : 'medium';
+
+        queries.createSecurityFinding({
+          projectId: state.projectId,
+          sessionId: state.sessionId,
+          title: `Auditoria Red Team: ${state.goal.length > 50 ? state.goal.slice(0, 50) + '...' : state.goal}`,
+          category: textLower.includes('auth') ? 'auth' : textLower.includes('inject') ? 'injection' : 'owasp',
+          severity,
+          redTeamDetails: agentResponseText.length > 600 ? agentResponseText.slice(0, 600) + '...' : agentResponseText,
+          blueTeamMitigation: 'Mitigação Blue Team: Aplicar validações estritas, sanitização de inputs e headers de segurança.',
+          status: 'open',
+          affectedFile: 'src/*',
+        });
+
+        const summary = queries.getProjectSecuritySummary(state.projectId);
+        io.to(`project_${state.projectId}`).emit('security_updated', { summary });
+      } catch (e) {
+        console.warn('Falha ao registrar finding de segurança automático:', e);
+      }
+    }
+
     const graphMessage: GraphMessage = {
       id: `msg_${Date.now()}`,
       role: 'assistant',

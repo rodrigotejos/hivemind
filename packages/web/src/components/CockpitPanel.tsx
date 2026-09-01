@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Play, AlertTriangle, ShieldCheck, CloudUpload, Activity, Coins, CheckCircle, RefreshCw, Cpu, Sparkles } from 'lucide-react';
+import { Play, AlertTriangle, ShieldCheck, ShieldAlert, CloudUpload, Activity, Coins, CheckCircle, RefreshCw, Cpu, Sparkles } from 'lucide-react';
 import { io } from 'socket.io-client';
 
 interface CockpitPanelProps {
@@ -36,6 +36,7 @@ export default function CockpitPanel({
   const [maxTurns, setMaxTurns] = useState(5);
   const [isLoading, setIsLoading] = useState(false);
   const [telemetry, setTelemetry] = useState<any>(null);
+  const [securitySummary, setSecuritySummary] = useState<any>(null);
   const [setupStatus, setSetupStatus] = useState<any>(null);
   const [snapshotMsg, setSnapshotMsg] = useState<string | null>(null);
 
@@ -78,9 +79,19 @@ export default function CockpitPanel({
       .catch(() => {});
   };
 
+  const fetchSecurity = () => {
+    fetch(`${apiUrl}/api/projects/${projectId}/security`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) setSecuritySummary(data);
+      })
+      .catch(() => {});
+  };
+
   useEffect(() => {
     fetchGraphState();
     fetchTelemetry();
+    fetchSecurity();
 
     const socket = io(apiUrl);
     socket.emit('join_project', { projectId });
@@ -104,9 +115,14 @@ export default function CockpitPanel({
       if (data.telemetry) setTelemetry(data.telemetry);
     });
 
+    socket.on('security_updated', (data) => {
+      if (data.summary) setSecuritySummary(data.summary);
+    });
+
     const interval = setInterval(() => {
       fetchGraphState();
       fetchTelemetry();
+      fetchSecurity();
     }, 3000);
 
     return () => {
@@ -193,57 +209,76 @@ export default function CockpitPanel({
     <div className="space-y-4">
       {/* 1. Bar de Telemetria e Governança (Modo Expandido) */}
       {!compact && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
-            <div className="p-2.5 bg-indigo-500/10 text-indigo-400 rounded-lg">
-              <Activity size={20} />
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+          <div className="bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-xl flex items-center gap-3">
+            <div className="p-2 bg-indigo-500/10 text-indigo-400 rounded-lg">
+              <Activity size={18} />
             </div>
             <div>
-              <div className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Status do Grafo</div>
-              <div className="text-sm font-semibold text-white capitalize">
-                {graphState?.status || 'idle'} {graphState?.turnCount !== undefined ? `(${graphState.turnCount}/${graphState.maxTurns || 5} turns)` : ''}
+              <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Status Grafo</div>
+              <div className="text-xs font-semibold text-white capitalize truncate">
+                {graphState?.status || 'idle'} {graphState?.turnCount !== undefined ? `(${graphState.turnCount}/${graphState.maxTurns || 5}t)` : ''}
               </div>
             </div>
           </div>
 
-          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
-            <div className="p-2.5 bg-emerald-500/10 text-emerald-400 rounded-lg">
-              <Coins size={20} />
+          <div className="bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-xl flex items-center gap-3">
+            <div className="p-2 bg-emerald-500/10 text-emerald-400 rounded-lg">
+              <Coins size={18} />
             </div>
             <div>
-              <div className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Consumo Tokens</div>
-              <div className="text-sm font-semibold text-white">
-                {telemetry?.totalTokens?.toLocaleString() || '0'} tokens (~${telemetry?.estimatedCostUsd || '0.00'})
+              <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Consumo Tokens</div>
+              <div className="text-xs font-semibold text-white truncate">
+                {telemetry?.totalTokens?.toLocaleString() || '0'} (~${telemetry?.estimatedCostUsd || '0.00'})
               </div>
             </div>
           </div>
 
-          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
-            <div className="p-2.5 bg-cyan-500/10 text-cyan-400 rounded-lg">
-              <ShieldCheck size={20} />
+          <div className="bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-xl flex items-center gap-3">
+            <div className={`p-2 rounded-lg ${
+              (securitySummary?.score ?? 100) >= 90 ? 'bg-rose-500/10 text-rose-400' : 'bg-amber-500/10 text-amber-400'
+            }`}>
+              <ShieldAlert size={18} />
             </div>
             <div>
-              <div className="text-xs text-zinc-500 uppercase font-bold tracking-wider">AI-DLC & MCP</div>
+              <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Red vs. Blue Score</div>
+              <div className="text-xs font-semibold text-white flex items-center gap-1.5">
+                <span>{securitySummary?.score ?? 100}/100</span>
+                <span className={`text-[10px] font-bold px-1.5 py-0.2 rounded ${
+                  (securitySummary?.score ?? 100) >= 90 ? 'bg-emerald-500/20 text-emerald-300' : 'bg-amber-500/20 text-amber-300'
+                }`}>
+                  {securitySummary?.rating || 'A+'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          <div className="bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-xl flex items-center gap-3">
+            <div className="p-2 bg-cyan-500/10 text-cyan-400 rounded-lg">
+              <ShieldCheck size={18} />
+            </div>
+            <div>
+              <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">AI-DLC & MCP</div>
               <button
                 onClick={handleAutoSetup}
                 className="text-xs text-cyan-400 hover:text-cyan-300 underline font-medium cursor-pointer"
               >
-                Executar Auto-Setup
+                Auto-Setup
               </button>
             </div>
           </div>
 
-          <div className="bg-zinc-900/60 border border-zinc-800 p-4 rounded-xl flex items-center gap-3">
-            <div className="p-2.5 bg-purple-500/10 text-purple-400 rounded-lg">
-              <CloudUpload size={20} />
+          <div className="bg-zinc-900/60 border border-zinc-800 p-3.5 rounded-xl flex items-center gap-3">
+            <div className="p-2 bg-purple-500/10 text-purple-400 rounded-lg">
+              <CloudUpload size={18} />
             </div>
             <div>
-              <div className="text-xs text-zinc-500 uppercase font-bold tracking-wider">Backup Resiliente</div>
+              <div className="text-[10px] text-zinc-500 uppercase font-bold tracking-wider">Backup S3</div>
               <button
                 onClick={handleCreateSnapshot}
                 className="text-xs text-purple-400 hover:text-purple-300 underline font-medium cursor-pointer"
               >
-                Criar Snapshot S3
+                Snapshot S3
               </button>
             </div>
           </div>

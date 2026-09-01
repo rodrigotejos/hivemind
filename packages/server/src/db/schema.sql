@@ -80,3 +80,20 @@ CREATE TABLE IF NOT EXISTS task_sessions (
 
 CREATE INDEX IF NOT EXISTS idx_task_sessions_project ON task_sessions(project_id, created_at);
 
+CREATE TABLE IF NOT EXISTS security_findings (
+  id                   TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+  project_id           TEXT NOT NULL REFERENCES projects(id),
+  session_id           TEXT,
+  title                TEXT NOT NULL,
+  category             TEXT NOT NULL, -- injection | auth | secret_leak | sanitization | owasp | configuration | crypto
+  severity             TEXT NOT NULL, -- critical | high | medium | low | info
+  red_team_details     TEXT,
+  blue_team_mitigation TEXT,
+  status               TEXT DEFAULT 'open', -- open | mitigating | mitigated | verified
+  affected_file        TEXT,
+  created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_project ON security_findings(project_id, status);
+

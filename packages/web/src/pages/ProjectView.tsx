@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, BrainCircuit, Users, Terminal, Sparkles } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, Users, Terminal, Sparkles, ShieldCheck } from 'lucide-react';
 import AgentStatus from '../components/AgentStatus';
 import CockpitPanel from '../components/CockpitPanel';
+import SecurityAuditPanel from '../components/SecurityAuditPanel';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 
@@ -10,6 +11,7 @@ export default function ProjectView() {
   const { id } = useParams();
   const [project, setProject] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
+  const [activeTab, setActiveTab] = useState<'overview' | 'security'>('overview');
 
   useEffect(() => {
     fetch(`${API_URL}/api/projects/${id}`)
@@ -57,52 +59,86 @@ export default function ProjectView() {
       {/* Cockpit Human-in-the-Loop & Governança */}
       <CockpitPanel projectId={id || ''} apiUrl={API_URL} />
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 space-y-8">
-          <div className="glass-card p-1 rounded-2xl relative">
-            <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 blur-xl opacity-50 rounded-2xl"></div>
-            <div className="relative bg-zinc-950/80 backdrop-blur-xl p-8 rounded-xl border border-white/5 h-full">
-              <div className="flex items-center justify-between mb-6">
-                <h2 className="text-lg font-bold flex items-center gap-3 text-white">
-                  <div className="p-2 bg-indigo-500/10 rounded-lg">
-                    <BrainCircuit className="text-indigo-400" size={24} /> 
-                  </div>
-                  Executive Summary
-                </h2>
-                <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
-                  <Sparkles size={14} className="text-amber-500" /> AI-Generated
-                </div>
-              </div>
-              <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
-                {(project.shared_context || 'Nenhum contexto gerado ainda.').split('\n').map((para: string, i: number) => (
-                  <p key={i} className="mb-4 leading-relaxed">{para}</p>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
+      {/* Navegação de Abas do Projeto */}
+      <div className="flex items-center gap-3 border-b border-zinc-800 pb-2">
+        <button
+          onClick={() => setActiveTab('overview')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'overview'
+              ? 'bg-zinc-800 text-white border border-zinc-700 shadow-sm'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+          }`}
+        >
+          <BrainCircuit size={16} className={activeTab === 'overview' ? 'text-indigo-400' : 'text-zinc-500'} />
+          Visão Geral & Wiki Técnica
+        </button>
 
-        <div>
-          <div className="glass-card p-6 rounded-2xl h-full border-zinc-800/50">
-            <h2 className="text-lg font-bold flex items-center gap-3 mb-6 text-white pb-4 border-b border-white/5">
-              <div className="p-2 bg-cyan-500/10 rounded-lg">
-                <Users className="text-cyan-400" size={20} />
-              </div>
-              Agentes Alocados
-            </h2>
-            <div className="flex flex-col gap-4">
-              {agents.map(agent => (
-                <AgentStatus key={agent.id} agent={agent} />
-              ))}
-              {agents.length === 0 && (
-                <div className="p-4 border border-dashed border-zinc-700 rounded-xl text-center text-sm text-zinc-500">
-                  Nenhum agente associado.
+        <button
+          onClick={() => setActiveTab('security')}
+          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+            activeTab === 'security'
+              ? 'bg-zinc-800 text-white border border-rose-500/40 shadow-sm'
+              : 'text-zinc-400 hover:text-zinc-200 hover:bg-zinc-900/60'
+          }`}
+        >
+          <ShieldCheck size={16} className={activeTab === 'security' ? 'text-rose-400' : 'text-zinc-500'} />
+          Auditoria Red Team vs. Blue Team
+          <span className="px-1.5 py-0.2 bg-rose-500/20 text-rose-300 text-[10px] rounded-full font-bold">
+            Adversarial
+          </span>
+        </button>
+      </div>
+
+      {activeTab === 'overview' ? (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          <div className="lg:col-span-2 space-y-8">
+            <div className="glass-card p-1 rounded-2xl relative">
+              <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 blur-xl opacity-50 rounded-2xl"></div>
+              <div className="relative bg-zinc-950/80 backdrop-blur-xl p-8 rounded-xl border border-white/5 h-full">
+                <div className="flex items-center justify-between mb-6">
+                  <h2 className="text-lg font-bold flex items-center gap-3 text-white">
+                    <div className="p-2 bg-indigo-500/10 rounded-lg">
+                      <BrainCircuit className="text-indigo-400" size={24} /> 
+                    </div>
+                    Executive Summary
+                  </h2>
+                  <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
+                    <Sparkles size={14} className="text-amber-500" /> AI-Generated
+                  </div>
                 </div>
-              )}
+                <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+                  {(project.shared_context || 'Nenhum contexto gerado ainda.').split('\n').map((para: string, i: number) => (
+                    <p key={i} className="mb-4 leading-relaxed">{para}</p>
+                  ))}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <div className="glass-card p-6 rounded-2xl h-full border-zinc-800/50">
+              <h2 className="text-lg font-bold flex items-center gap-3 mb-6 text-white pb-4 border-b border-white/5">
+                <div className="p-2 bg-cyan-500/10 rounded-lg">
+                  <Users className="text-cyan-400" size={20} />
+                </div>
+                Agentes Alocados
+              </h2>
+              <div className="flex flex-col gap-4">
+                {agents.map(agent => (
+                  <AgentStatus key={agent.id} agent={agent} />
+                ))}
+                {agents.length === 0 && (
+                  <div className="p-4 border border-dashed border-zinc-700 rounded-xl text-center text-sm text-zinc-500">
+                    Nenhum agente associado.
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         </div>
-      </div>
+      ) : (
+        <SecurityAuditPanel projectId={id || ''} apiUrl={API_URL} />
+      )}
     </div>
   );
 }

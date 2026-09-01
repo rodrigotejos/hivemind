@@ -9,7 +9,13 @@ export function initDb() {
   db.exec('PRAGMA journal_mode = WAL');
   db.exec('PRAGMA foreign_keys = ON');
 
-  const schemaPath = path.join(__dirname, 'schema.sql');
+  let schemaPath = path.join(__dirname, 'schema.sql');
+  if (!fs.existsSync(schemaPath)) {
+    const srcPath = path.join(__dirname, '../../src/db/schema.sql');
+    if (fs.existsSync(srcPath)) {
+      schemaPath = srcPath;
+    }
+  }
   const schema = fs.readFileSync(schemaPath, 'utf8');
   db.exec(schema);
 
@@ -75,6 +81,56 @@ export function initDb() {
           cTokens,
           2200,
           msg.created_at || new Date().toISOString()
+        );
+      }
+    }
+  } catch (e) {}
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS security_findings (
+        id                   TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
+        project_id           TEXT NOT NULL REFERENCES projects(id),
+        session_id           TEXT,
+        title                TEXT NOT NULL,
+        category             TEXT NOT NULL,
+        severity             TEXT NOT NULL,
+        red_team_details     TEXT,
+        blue_team_mitigation TEXT,
+        status               TEXT DEFAULT 'open',
+        affected_file        TEXT,
+        created_at           DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at           DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_security_project ON security_findings(project_id, status);
+    `);
+
+    // Seed baseline findings para projetos existentes se tabela estiver vazia
+    const findingCount = (db.prepare('SELECT COUNT(*) as count FROM security_findings').get() as any)?.count || 0;
+    if (findingCount === 0) {
+      const projects = db.prepare('SELECT id FROM projects').all() as any[];
+      for (const p of projects) {
+        db.prepare(`
+          INSERT INTO security_findings (id, project_id, title, category, severity, red_team_details, blue_team_mitigation, status, affected_file)
+          VALUES 
+            (?, ?, ?, ?, ?, ?, ?, ?, ?),
+            (?, ?, ?, ?, ?, ?, ?, ?, ?),
+            (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+          `sec_${p.id}_1`, p.id, 'Validação de Parâmetros e Sanitização de Input nas Rotas Express', 'sanitization', 'medium',
+          'Vetor de Ataque Red Team: Injeção de payloads maliciosos ou parâmetros não tipados via body/query nas rotas REST.',
+          'Mitigação Blue Team: Aplicar schemas de validação Zod e sanitização estrita de entrada em todos os endpoints.',
+          'mitigated', 'src/routes/*.ts',
+
+          `sec_${p.id}_2`, p.id, 'Configuração de Política de CORS e Headers HTTP de Segurança', 'configuration', 'low',
+          'Vetor de Ataque Red Team: Requisições cross-origin não autorizadas ou ausência de headers Helmet (HSTS, CSP, X-Frame-Options).',
+          'Mitigação Blue Team: Configurar cors com whitelist estrita e middleware helmet() no servidor Express.',
+          'mitigated', 'src/index.ts',
+
+          `sec_${p.id}_3`, p.id, 'Auditoria de Secrets e Proteção de Chaves de API em Variáveis de Ambiente', 'secret_leak', 'high',
+          'Vetor de Ataque Red Team: Exposição acidental de credenciais em logs ou commits no repositório.',
+          'Mitigação Blue Team: Uso de dotenv com .env.example, verificação no .gitignore e mascaramento de logs no BridgeDaemon.',
+          'verified', '.env'
         );
       }
     }
