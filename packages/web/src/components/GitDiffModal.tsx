@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Terminal, CheckCircle, RefreshCw, X, Send } from 'lucide-react';
 
 interface GitDiffModalProps {
@@ -19,9 +19,26 @@ export default function GitDiffModal({
   onCommitSuccess,
 }: GitDiffModalProps) {
   const [commitMessage, setCommitMessage] = useState(suggestedCommitMessage);
+  const [liveDiff, setLiveDiff] = useState<string>(diff);
+  const [filesChanged, setFilesChanged] = useState<string[]>([]);
+  const [fetchingDiff, setFetchingDiff] = useState(false);
   const [committing, setCommitting] = useState(false);
   const [committedHash, setCommittedHash] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    setFetchingDiff(true);
+    fetch(`${apiUrl}/api/projects/${projectId}/git/diff`)
+      .then(res => res.json())
+      .then(data => {
+        if (data.success) {
+          if (data.diff) setLiveDiff(data.diff);
+          if (data.filesChanged) setFilesChanged(data.filesChanged);
+        }
+      })
+      .catch(() => {})
+      .finally(() => setFetchingDiff(false));
+  }, [projectId, apiUrl]);
 
   const handleCommit = async () => {
     if (!commitMessage.trim()) return;
@@ -76,11 +93,27 @@ export default function GitDiffModal({
           </button>
         </div>
 
+        {/* Changed Files Chips */}
+        {filesChanged.length > 0 && (
+          <div className="px-5 py-2.5 bg-zinc-900/40 border-b border-zinc-800/80 flex items-center gap-2 flex-wrap">
+            <span className="text-[11px] font-bold text-zinc-400">Arquivos Modificados:</span>
+            {filesChanged.map((file, idx) => (
+              <span key={idx} className="px-2 py-0.5 bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 rounded text-[10px] font-mono">
+                {file}
+              </span>
+            ))}
+          </div>
+        )}
+
         {/* Diff View Box */}
         <div className="flex-1 overflow-y-auto p-4 font-mono text-xs custom-scrollbar bg-black/40">
-          {diff ? (
+          {fetchingDiff ? (
+            <div className="flex items-center justify-center p-8 text-zinc-400 text-xs">
+              <RefreshCw className="animate-spin mr-2" size={16} /> Carregando alterações do repositório...
+            </div>
+          ) : (liveDiff || diff) ? (
             <div className="space-y-0.5">
-              {diff.split('\n').map((line, idx) => {
+              {(liveDiff || diff).split('\n').map((line, idx) => {
                 const isAdd = line.startsWith('+') && !line.startsWith('+++');
                 const isDel = line.startsWith('-') && !line.startsWith('---');
                 const isHeader = line.startsWith('diff --git') || line.startsWith('index') || line.startsWith('---') || line.startsWith('+++');
@@ -101,7 +134,7 @@ export default function GitDiffModal({
             </div>
           ) : (
             <div className="p-8 text-center text-zinc-500">
-              Nenhuma alteração detectada no git diff.
+              Nenhuma alteração pendente detectada no repositório.
             </div>
           )}
         </div>

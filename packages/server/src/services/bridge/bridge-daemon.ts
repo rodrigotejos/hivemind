@@ -189,8 +189,17 @@ export class BridgeDaemonService {
       const args = [
         '-p', cleanPrompt,
         '--add-dir', workingDir,
+        '--mode', 'accept-edits',
         '--dangerously-skip-permissions',
       ];
+
+      if (request.model && request.model !== 'auto') {
+        args.push('--model', request.model);
+      }
+
+      if (request.reasoningLevel) {
+        args.push('--effort', request.reasoningLevel);
+      }
 
       const sanitizedEnv = { ...process.env };
       delete sanitizedEnv.NODE_DEBUG;

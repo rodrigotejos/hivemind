@@ -26,9 +26,10 @@ gitRouter.get('/projects/:projectId/git/diff', async (req: Request, res: Respons
       statusOutput = stdout.trim();
     } catch (e) {}
 
-    // 2. Obtém o diff completo das modificações
+    // 2. Obtém o diff completo das modificações (incluindo novos arquivos)
     let diffOutput = '';
     try {
+      await execPromise('git add -N .', { cwd: workingDir }).catch(() => {});
       const { stdout } = await execPromise('git diff HEAD', { cwd: workingDir });
       diffOutput = stdout.trim();
     } catch (e) {

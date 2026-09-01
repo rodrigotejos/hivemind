@@ -218,9 +218,10 @@ securityRouter.post('/projects/:projectId/security/findings/:findingId/remediate
           blue_team_mitigation: finding.blue_team_mitigation || 'Patch defensivo aplicado e validado pelo Red Team e QA.',
         });
 
-        // Obtém git diff das alterações
+        // Obtém git diff das alterações (incluindo novos arquivos)
         let gitDiff = '';
         try {
+          await execPromise('git add -N .', { cwd: workingDir }).catch(() => {});
           const { stdout } = await execPromise('git diff HEAD', { cwd: workingDir });
           gitDiff = stdout.trim();
         } catch (e) {
