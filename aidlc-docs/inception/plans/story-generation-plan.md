@@ -1,68 +1,72 @@
 # Story Generation Plan
 
-## Purpose
-Estabelecer a metodologia, personas e critérios de aceitação (INVEST) para a nova funcionalidade de Colaboração Multi-Agente Autônoma do Hivemind com LangGraph, LangSmith e Antigravity CLI.
+## Methodology and Approach
+As melhorias propostas misturam infraestrutura pesada de agentes (LLM, tokens, backend) com mudanças diretas de UX no front-end (streaming). Sugere-se uma abordagem **Feature-Based** combinada com **User Journey** para focar em como o principal usuário da plataforma (Supervisor Humano) vai sentir essas mudanças no dia a dia.
+
+## Execution Checklist
+
+- [x] 1. Read the approved answers from the embedded questions in this plan.
+- [x] 2. Generate `personas.md` with user archetypes (ex: Human Supervisor, System Administrator).
+- [x] 3. Generate `stories.md` with user stories organized by the Feature-Based approach (Streaming, Auto-Recovery, LLM Security/Prompts, Git Auto-Commit).
+- [x] 4. Ensure all stories follow the INVEST criteria (Independent, Negotiable, Valuable, Estimable, Small, Testable).
+- [x] 5. Write specific BDD-style (Given/When/Then) Acceptance Criteria for each story (especialmente cruciais para cenários de Retry/Timeout e Structured Output).
+- [x] 6. Map the personas to the relevant user stories in the documentation.
 
 ---
 
-## Step-by-Step Execution Plan
+## Clarification Questions
 
-- [x] **Step 1: Definição e Mapeamento de Personas**
-  - [x] Persona 1: Engenheiro Chefe / Líder do Projeto (Humano - Rodrigo)
-  - [x] Persona 2: Agente Supervisor AI (AI Manager / LangGraph Orchestrator)
-  - [x] Persona 3: Agente Especialista em Frontend & UI (Alpha - React/Vite/Figma)
-  - [x] Persona 4: Agente Especialista em Backend & APIs (Beta - Node/Express/DB)
-  - [x] Persona 5: Agente Especialista em QA & PBT (Gamma - Testes & Invariantes)
-  - [x] Persona 6: Agente Especialista em Segurança & Red Team (Adversarial Security)
-  - [x] Persona 7: Agente Especialista em Infraestrutura & Cloud (DevOps & S3 Backup)
-  - [x] Gerar `aidlc-docs/inception/user-stories/personas.md`
+Para gerar as histórias com a granularidade e foco corretos, por favor, responda:
 
-- [x] **Step 2: Geração das Histórias de Usuário (INVEST & Critérios de Aceitação)**
-  - [x] Epic 1: Auto-Setup e Onboarding de Projetos (Greenfield & Brownfield)
-  - [x] Epic 2: Atribuição e Carregamento de Skills Especializadas
-  - [x] Epic 3: Orquestração Autônoma de Agentes via LangGraph & Bridge Daemon
-  - [x] Epic 4: Cockpit Humano-no-Controle (Human-in-the-Loop & Interrupções)
-  - [x] Epic 5: Observabilidade, Telemetria de Tokens & Rastreamento com LangSmith
-  - [x] Epic 6: Persistência Resiliente e Backup em Nuvem (S3 Snapshots)
-  - [x] Gerar `aidlc-docs/inception/user-stories/stories.md` com critérios de aceitação detalhados
+### Question 1: Story Granularity para Backend/Infra
+Como as melhorias de backend (LLM Security, extração de prompts e contagem de tokens) não têm uma "interface de usuário" direta, como você prefere que essas histórias sejam escritas?
 
-- [x] **Step 3: Validação de Conformidade com Extensões Ativadas**
-  - [x] Verificar conformidade com Security Baseline (SECURITY-01 a SECURITY-06)
-  - [x] Verificar conformidade com Resiliency Baseline (RESILIENCY-01 a RESILIENCY-15 + Red/Blue Team)
-  - [x] Verificar conformidade com Property-Based Testing (PBT-01 a PBT-09)
+A) Focar no valor entregue ao "System Administrator" (ex: "Como administrador, quero que as respostas sejam em JSON puro para evitar crash no pipeline").
 
-- [x] **Step 4: Aprovação e Atualização de Estado**
-  - [x] Atualizar `aidlc-docs/aidlc-state.md` e `aidlc-docs/audit.md`
-  - [x] Submeter artefatos de User Stories para revisão do usuário
+B) Usar a abordagem de "Histórias Técnicas / Enablers" sem focar muito em uma persona humana.
 
----
+C) Agrupar todas as melhorias internas numa única história Épica de "Resiliência de Backend".
 
-## Story Breakdown Methodology Questions
+X) Other (please describe after [Answer]: tag below)
 
-Por favor, confirme a metodologia de estruturação das histórias de usuário respondendo após a tag `[Answer]:`:
+[Answer]: 
 
-### Question 1: Abordagem de Organização das Histórias
-Como você prefere que as histórias de usuário sejam organizadas no documento final?
+### Question 2: Comportamento do Real-time Streaming
+Para a interface de Cockpit, qual o nível de detalhe esperado nas histórias sobre o Real-time Streaming?
 
-A) Baseada em Epics de Jornada do Usuário (User Journey) — Organizadas pelo fluxo cronológico da experiência (Setup -> Atribuição de Agentes -> Conversa Autônoma -> Intervenção Humana -> Validação QA/Segurança -> Deploy/Backup).
+A) Detalhar até os estados de "Agente Pensando", "Digitando..." e transições visuais de término da mensagem.
 
-B) Baseada em Personas e Papéis (Persona-Based) — Agrupadas por cada agente especialista e pela visão do engenheiro humano.
+B) Manter abstrato ("A mensagem aparece progressivamente na tela").
 
-C) Híbrida (Recomendada) — Epics estruturados por capacidades técnicas e funcionais, com mapeamento explícito de cada Persona envolvida e critérios de aceitação no formato Gherkin (Given/When/Then).
+C) Focar primariamente nos eventos do Socket.IO sendo recebidos e renderizados (foco mais técnico).
 
-D) Other (please describe after [Answer]: tag below)
+X) Other (please describe after [Answer]: tag below)
 
-[Answer]: C
+[Answer]: 
 
----
+### Question 3: Fluxo do Auto-Recovery
+Para a feature de Auto-Recovery de falhas da API da LLM, como o usuário deve ser notificado?
 
-### Question 2: Nível de Detalhamento dos Critérios de Aceitação
-Qual o nível de granularidade desejado para os critérios de aceitação de cada história?
+A) Mostrar um toast/alerta não-intrusivo ("Agente X sofreu timeout, retentando 1/3...").
 
-A) Detalhado com Casos de Teste e PBT — Cada história inclui critérios funcionais, casos de erro/borda e propriedades invariantes para orientar diretamente a suíte de testes.
+B) Bloquear a UI do chat com um skeleton de loading para aquele agente até a tentativa ser sucedida ou falhar de vez.
 
-B) Padrão Ágil — Critérios objetivos de aceite com foco em funcionalidade e comportamento esperado.
+C) Não notificar na UI as retentativas intermediárias, apenas se falhar permanentemente (onde exibirá a mensagem de erro).
 
-C) Other (please describe after [Answer]: tag below)
+X) Other (please describe after [Answer]: tag below)
 
-[Answer]: A
+[Answer]: 
+
+### Question 4: Git Auto-Commit Approval
+No processo de Git Auto-Commit ao final da rodada do LangGraph, o supervisor precisará confirmar antes do push?
+
+A) Sim, apresentar um Modal/Diff interativo no Cockpit onde o Supervisor aprova o commit gerado pelos agentes.
+
+B) Não, os agentes fazem commit e push automaticamente; o humano apenas vê no histórico.
+
+C) Os agentes apenas geram as mudanças locais (no disco), o commit e push continuam sendo manuais feitos pelo dev no seu terminal.
+
+X) Other (please describe after [Answer]: tag below)
+
+[Answer]: 
+

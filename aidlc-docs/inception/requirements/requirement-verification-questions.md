@@ -1,116 +1,50 @@
-# Requirements Clarification Questions: Autonomous Multi-Agent Collaboration
+# Requirements Clarification Questions
 
-Por favor, responda às perguntas abaixo preenchendo a letra da sua escolha após a tag `[Answer]:`. Caso queira descrever uma resposta personalizada, selecione a opção **Other** e detalhe sua preferência.
+Realizei uma validação minuciosa no código fonte (focando em `ai-manager.ts`, `nodes.ts` e arquitetura geral) utilizando o `codebase-memory`. Baseado na sua solicitação, elaborei o plano primário de melhorias e novas features, ordenado do mais fácil/útil para o mais complexo/menos útil.
 
----
+Por favor, responda às questões abaixo para definirmos o escopo exato que será implementado na próxima fase.
 
-## Question 1: Autonomous Execution & Trigger Architecture
-Como deve ser estruturado o mecanismo de execução autônoma entre os múltiplos agentes de IA (Antigravity CLI / Kiro)?
+## Proposta do Plano Primário
 
-A) Bridge Daemon Orientado a Eventos — Um daemon de segundo plano escuta os eventos do Hivemind via Socket.IO/REST; quando um agente posta uma pergunta, blocker ou handoff, o daemon aciona automaticamente o agente destinatário via `agy` CLI (`--continue` / `--print`) e publica a resposta de volta ao Hivemind.
+### PARTE 1: Melhorias, Performance e Segurança (Ordem: Fácil/Melhor → Complexo)
 
-B) Loop Autônomo com Polling por Agente — Cada instância de agente CLI roda seu próprio ciclo com uma Skill/Hook que consulta periodicamente o endpoint `/pending` do Hivemind e responde autonomamente quando há novas mensagens para seu ID.
+1. **[Fácil / Alto Impacto] Prompts Performance (Desacoplamento)**: Extrair prompts hardcoded (ex: em `ai-manager.ts` e `nodes.ts`) para um registro ou arquivos separados, melhorando a manutenção e permitindo hot-reload.
+2. **[Fácil / Alto Impacto] LLM Security (Structured Output)**: Substituir o parse manual via regex (`replace(/```json/g, '')`) no `analyzeMessagePriority` pelo uso oficial de Structured Output (JSON Schema) da API do Gemini, prevenindo injeções de prompt e falhas de formatação.
+3. **[Médio / Bom Impacto] Performance de Código e Token Accounting**: O método `summarizeProject` apenas corta as mensagens (`slice(-20)`). O plano é implementar sumarização com sliding window inteligente utilizando a contagem exata de tokens já disponível no `telemetry-service.ts`.
+4. **[Complexo / Menor Impacto] Process Performance (Timeouts e Streams)**: Melhorar a resiliência do `bridge-daemon` removendo timeouts estáticos e implementando processamento assíncrono avançado para não travar a UI (Cockpit).
 
-C) Spawner Direto no Servidor Hivemind — O próprio `@ai-dlc/server` gerencia o ciclo de vida dos processos `agy` CLI na máquina local, instanciando subprocessos para cada agente especialista (QA, Infra, Frontend, Backend) conforme as tarefas chegam.
+### PARTE 2: Novas Features (Ordem: Rápido/Bom → Demorado/Menos útil)
 
-D) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
----
-
-## Question 2: Anti-Loop & Runaway Cost Safeguards
-Como o sistema deve prevenir loops infinitos de diálogo ou consumo descontrolado de tokens entre os agentes autônomos?
-
-A) Limite Máximo de Turnos por Tópico — Definir um teto configurável de rodadas de mensagens (ex: máx. 3 a 5 trocas) antes de pausar e exigir confirmação humana ou conclusão automática da tarefa.
-
-B) Gate de Supervisão pelo AI Manager — O AI Manager (LangChain/Gemini) avalia cada resposta antes de disparar o próximo agente, decidindo se a discussão convergiu para uma solução ou se deve ser encerrada.
-
-C) Acionamento Estrito por Hand-off / Decisão Técnica — Agentes só respondem quando há uma tarefa ou pergunta técnica objetiva (`question`, `blocker`, `task_done`, `handoff`), bloqueando conversas abertas não direcionadas.
-
-D) Other (please describe after [Answer]: tag below)
-
-[Answer]: B
+1. **[Rápido / Excelente] Real-time Streaming no Cockpit**: Fazer os agentes enviarem texto em "streaming" (typing effect) para o Socket.IO invés de aguardar toda a resposta do LLM, melhorando drasticamente a UX.
+2. **[Médio / Bom] Agente de Auto-Recovery**: Criar um mecanismo para que, se a API da LLM falhar (rate limit/timeout), um fallback não retorne string estática (`[AgentName]: Execução concluída...`), mas ative uma fila de re-tentativa e notifique o usuário na UI.
+3. **[Demorado / Menos Útil] Git Diff & Auto-Commit Supervisor**: Permitir que o supervisor proponha commits reais no repositório no final de cada rodada do LangGraph, invés de apenas atualizar o "Shared Context" no banco de dados.
 
 ---
 
-## Question 3: Human-in-the-Loop & Dashboard Cockpit
-Qual deve ser o nível de controle e visibilidade do engenheiro humano sobre as conversas autônomas no painel Web?
+## Question 1
+Sobre a **PARTE 1 (Melhorias, Performance e Segurança)**, quais itens devemos incluir no escopo deste ciclo de desenvolvimento?
 
-A) Cockpit em Tempo Real com Interrupção Imediata — O painel exibe o chat e as ações em tempo real via WebSocket com botões para pausar o loop autônomo, assumir a conversa ou aprovar decisões críticas a qualquer momento.
+A) Incluir todos os itens propostos (1 a 4).
 
-B) Alerta Apenas em Blockers e Conflitos — Os agentes conversam e iteram livremente em background e só notificam o humano (som/push/badge) se um blocker crítico ou conflito de arquivos for detectado.
+B) Incluir apenas os de Fácil/Médio impacto (1, 2 e 3).
 
-C) Modo Híbrido com Aprovação de Passos Críticos — Ações de baixo risco (perguntas e alinhamento) são 100% autônomas, mas mudanças de arquitetura e edições de código em lote exigem 1 clique de aprovação no painel.
-
-D) Other (please describe after [Answer]: tag below)
-
-[Answer]: C, seria um human in the lopp. MAS quem guia, coamndo é o humona. quem é responsavel por tudo
-
----
-
-## Question 4: Target Execution Surface
-Qual é o ambiente principal prioritário para a execução desses agentes autônomos nesta fase?
-
-A) Antigravity CLI (`agy`) com múltiplos agentes especializados rodando localmente (via terminal headless / background workers).
-
-B) Híbrido: Antigravity CLI (`agy`) e Kiro IDE / CLI interagindo no mesmo projeto.
-
-C) Extensão / Plugin para IDEs com sidecars integrados.
-
-D) Other (please describe after [Answer]: tag below)
-
-[Answer]: A. 
-
----
-
-## Question 5: Security Extensions
-Should security extension rules be enforced for this project?
-
-A) Yes — enforce all SECURITY rules as blocking constraints (recommended for production-grade applications)
-
-B) No — skip all SECURITY rules (suitable for PoCs, prototypes, and experimental projects)
+C) Incluir apenas os críticos de LLM Security e Prompts (1 e 2).
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: A
+[Answer]: 
 
----
+## Question 2
+Sobre a **PARTE 2 (Novas Features)**, quais funcionalidades devemos implementar neste ciclo?
 
-## Question 6: Resiliency Extensions
-Should the resiliency baseline be applied to this project?
+A) Incluir todas as features propostas (1 a 3).
 
-**What this extension is:** Enabling it applies a set of **directional, design-time best practices** for building resilient systems, derived from the **AWS Well-Architected Framework (Reliability Pillar)** and resilience-review guidance. It steers requirements, design, and code toward fault tolerance, high availability, observability, and recoverability.
+B) Incluir apenas o Streaming no Cockpit e o Auto-Recovery (1 e 2).
 
-**What this extension is NOT:** Enabling it does **not** make your workload production-ready, nor does it certify or guarantee any availability, RTO, or RPO target. It is a **starting point** that scaffolds good resiliency decisions early.
+C) Incluir apenas o Streaming no Cockpit (1).
 
-A) Yes — apply the resiliency baseline as directional best practices and design-time guidance (recommended for business-critical workloads, as an informed starting point that you can validate and harden before go-live)
-
-B) No — skip the resiliency baseline (suitable for PoCs, prototypes, and experimental projects where rapid iteration matters more than reliability)
+D) Não incluir features novas agora, focar apenas nas melhorias.
 
 X) Other (please describe after [Answer]: tag below)
 
-[Answer]: A, junto do fluxo adversal com o red and blue team.de forma iterativa, nao sometne uma vez.
-
----
-
-## Question 7: Property-Based Testing Extension
-Should property-based testing (PBT) rules be enforced for this project?
-
-A) Yes — enforce all PBT rules as blocking constraints (recommended for projects with business logic, data transformations, serialization, or stateful components)
-
-B) Partial — enforce PBT rules only for pure functions and serialization round-trips (suitable for projects with limited algorithmic complexity)
-
-C) No — skip all PBT rules (suitable for simple CRUD applications, UI-only projects, or thin integration layers with no significant business logic)
-
-X) Other (please describe after [Answer]: tag below)
-
-[Answer]: A
-
-OBS: vamos ja gerar skill, "genaricas" fortes para agetens de uso, diario, ler figma, criar back end, cria fornt end, ler docuemtnaco, qa, serguraca, infra e o que mais voce pensar. entao o proprio program quando for incair ele ja vai passar a skillq ue tem que ser usado, de forma autoamtica ou pelo comando do humano.
-
-OBS-2:como voce ja disse mas refornca sempre usando o IA-DLC.
-
-OBS-3:um modo de inciar um projeto ja existente com o hivemind ou criar umprejto hivimend do zero, ou sejo se eu tiver um progrma que ja uso e queo que ele comecar a iterjar com o hivimein temq ue ter um mod de configra utod e o ia-dlc se nao tiver e o mcp do codemery, se nao exitrir ter o pcao dentro da tela tambem fazer essa config. sim é bem compexo mas improtante, apra ter um replicabildaide se nao cada verz vai ser uam bagunca.
-
-OBS-4: fazer um odo de salver em numve, s3 pro emxeplo os aqurivos do ambite para se perder algo asim pode ser reciraod, proq eupedri tudo ohsitorico do chat mnao é legal.
+[Answer]: 

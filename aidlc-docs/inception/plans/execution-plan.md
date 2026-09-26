@@ -1,39 +1,29 @@
-# Execution Plan: Autonomous Multi-Agent Hivemind Platform
+# Execution Plan
 
 ## Detailed Analysis Summary
 
-### Transformation Scope (Brownfield Monorepo)
-- **Transformation Type**: System-wide Architectural Enhancement & Feature Addition
-- **Primary Changes**:
-  - Implement **LangGraph.js** state machine and Supervisor routing engine in `@ai-dlc/server`.
-  - Implement **Bridge Daemon** for event-driven Antigravity CLI (`agy`) execution with circuit breakers.
-  - Implement **LangSmith** tracing and token cost accounting for all agent and CLI activities.
-  - Expand React Web Dashboard (`web`) with **Human-in-the-Loop Cockpit** and `interrupt()` approval cards.
-  - Create standardized catalog of **Specialized Agent Skills** in `.agent/skills/`.
-  - Add **Auto-Setup Assistant** for rapid project onboarding (AI-DLC + MCP `codebase-memory`).
-  - Add **Cloud Resilience / S3 Snapshot** backup and restore engine.
-- **Affected Packages**: `@ai-dlc/server`, `web`, `@ai-dlc/sdk`, `.agent/skills/`, and CLI bridge scripts.
+### Transformation Scope (Brownfield Only)
+- **Transformation Type**: System Enhancement & Refactoring
+- **Primary Changes**: Real-time streaming UI, LLM Auto-recovery, LLM Structured Output, Token Sliding Window, Desacoplamento de Prompts, e Supervisor Git Auto-Commit.
+- **Related Components**: `server` (`ai-manager.ts`, `nodes.ts`, `bridge-daemon.ts`), `web` (Cockpit UI).
 
 ### Change Impact Assessment
-- **User-Facing Changes**: Sim. O painel web ganha controles de pausa/intervenção do loop, visualização ao vivo de grafos e cards de aprovação rápida.
-- **Structural Changes**: Sim. O AI Manager evolui de chains simples para uma máquina de estados com grafos cíclicos (`StateGraph`) do LangGraph.
-- **Data Model Changes**: Sim. Novos campos e tabelas no SQLite para checkpoints do LangGraph, traces de execução e histórico de snapshots.
-- **API Changes**: Sim. Novos endpoints REST e eventos Socket.IO para controle do loop autônomo, aprovação de interrupções (`/interrupt/resume`) e backup S3.
-- **NFR Impact**: Alto. Enforcing das extensões Security Baseline, Resiliency Baseline e Property-Based Testing (PBT).
+- **User-facing changes**: Yes - Cockpit vai exibir estados granulares (Thinking/Typing) via streaming, notificações de timeout/recovery e painel de Diff do Git.
+- **Structural changes**: Yes - O fluxo de eventos Socket.IO vai passar de síncrono por turno para eventos streamados.
+- **Data model changes**: No - O schema SQLite existente de mensagens e sessões suporta as mudanças (apenas estados locais na memória/UI precisam mudar).
+- **API changes**: Yes - A comunicação com a API do Google GenAI muda para suportar `responseSchema` e a emissão de Socket.IO será baseada em chunks.
+- **NFR impact**: Yes - Prevenção de injeção de prompt e JSON quebrado (Security), otimização de uso de tokens (Performance) e resiliência assíncrona (Process).
 
-### Component Relationships
-- **Primary Service**: `@ai-dlc/server` (Express, Socket.IO, LangGraph, LangSmith, SQLite)
-- **Client Application**: `web` (React 19, Vite, TailwindCSS, Cockpit HITL)
-- **Client SDK**: `@ai-dlc/sdk` (AiDlcClient com novos métodos de streaming e status)
-- **Autonomous Bridge**: `bridge-daemon` (Local `agy` CLI runner & subprocess manager)
-- **Custom Skills**: `.agent/skills/*` (Personas de Frontend, Backend, QA, Red Team, Infra, Docs)
+### Component Relationships (Brownfield Only)
+## Component Relationships
+- **Primary Component**: `server` (backend Node.js/LangGraph engine)
+- **Dependent Components**: `web` (React Cockpit interface que consome os websockets)
+- **Shared Components**: `@ai-dlc/sdk` (tipos de payload e interrupt que serão estendidos para Auto-Commit / Retry).
 
 ### Risk Assessment
-- **Risk Level**: Medium-High (Orquestração assíncrona concorrente com múltiplos agentes e chamadas de CLI)
-- **Rollback Complexity**: Moderate (Banco SQLite versionado com snapshots e arquitetura modular)
-- **Testing Complexity**: Comprehensive (Exige testes baseados em propriedades PBT, testes de integração e validação adversarial Red/Blue Team)
-
----
+- **Risk Level**: High (Modificação no núcleo de comunicação entre Engine AI e UI)
+- **Rollback Complexity**: Moderate (Pode ser revertido via git, mas altera comportamento esperado)
+- **Testing Complexity**: Complex (Testes exigem simular delays de rede, rate limits falsos (429) e injeção maliciosa de prompt).
 
 ## Workflow Visualization
 
@@ -48,14 +38,14 @@ flowchart TD
         US["User Stories<br/><b>COMPLETED</b>"]
         WP["Workflow Planning<br/><b>COMPLETED</b>"]
         AD["Application Design<br/><b>EXECUTE</b>"]
-        UG["Units Generation<br/><b>EXECUTE</b>"]
+        UG["Units Generation<br/>(Planning + Generation)<br/><b>EXECUTE</b>"]
     end
     
     subgraph CONSTRUCTION["🟢 CONSTRUCTION PHASE"]
-        FD["Functional Design<br/>(Per Unit)<br/><b>EXECUTE</b>"]
-        NFRA["NFR Requirements<br/>(Per Unit)<br/><b>EXECUTE</b>"]
-        NFRD["NFR Design<br/>(Per Unit)<br/><b>EXECUTE</b>"]
-        ID["Infrastructure Design<br/>(Per Unit)<br/><b>EXECUTE</b>"]
+        FD["Functional Design<br/><b>EXECUTE</b>"]
+        NFRA["NFR Requirements<br/><b>SKIP</b>"]
+        NFRD["NFR Design<br/><b>SKIP</b>"]
+        ID["Infrastructure Design<br/><b>SKIP</b>"]
         CG["Code Generation<br/>(Planning + Generation)<br/><b>EXECUTE</b>"]
         BT["Build and Test<br/><b>EXECUTE</b>"]
     end
@@ -65,117 +55,77 @@ flowchart TD
     end
     
     Start --> WD
-    WD --> RE
-    RE --> RA
-    RA --> US
-    US --> WP
+    WD --> RA
+    RA --> WP
     WP --> AD
     AD --> UG
     UG --> FD
-    FD --> NFRA
-    NFRA --> NFRD
-    NFRD --> ID
-    ID --> CG
-    CG -.->|Next Unit Loop| FD
+    FD --> CG
     CG --> BT
-    BT -.-> OPS
     BT --> End(["Complete"])
-
+    
     style WD fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style RE fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style RA fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style US fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style WP fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
+    
     style AD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style UG fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
     style FD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style NFRA fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style NFRD fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
-    style ID fill:#FFA726,stroke:#E65100,stroke-width:3px,stroke-dasharray: 5 5,color:#000
+    
     style CG fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
     style BT fill:#4CAF50,stroke:#1B5E20,stroke-width:3px,color:#fff
-    style OPS fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+    
+    style NFRA fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+    style NFRD fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+    style ID fill:#BDBDBD,stroke:#424242,stroke-width:2px,stroke-dasharray: 5 5,color:#000
+    
+    style INCEPTION fill:#BBDEFB,stroke:#1565C0,stroke-width:3px, color:#000
+    style CONSTRUCTION fill:#C8E6C9,stroke:#2E7D32,stroke-width:3px, color:#000
+    style OPERATIONS fill:#FFF59D,stroke:#F57F17,stroke-width:3px, color:#000
     style Start fill:#CE93D8,stroke:#6A1B9A,stroke-width:3px,color:#000
     style End fill:#CE93D8,stroke:#6A1B9A,stroke-width:3px,color:#000
-
-    style INCEPTION fill:#BBDEFB,stroke:#1565C0,stroke-width:3px,color:#000
-    style CONSTRUCTION fill:#C8E6C9,stroke:#2E7D32,stroke-width:3px,color:#000
-    style OPERATIONS fill:#FFF59D,stroke:#F57F17,stroke-width:3px,color:#000
-
+    
     linkStyle default stroke:#333,stroke-width:2px
 ```
 
-### Text Alternative for Workflow
-1. **INCEPTION PHASE**:
-   - Workspace Detection (COMPLETED)
-   - Reverse Engineering (COMPLETED)
-   - Requirements Analysis (COMPLETED)
-   - User Stories (COMPLETED)
-   - Workflow Planning (COMPLETED)
-   - Application Design (EXECUTE — Modelagem dos nós LangGraph, schemas de checkpoint e bridge)
-   - Units Generation (EXECUTE — Decomposição em 6 unidades independentes de trabalho)
-2. **CONSTRUCTION PHASE** (Executado por unidade):
-   - Functional Design (EXECUTE)
-   - NFR Requirements (EXECUTE)
-   - NFR Design (EXECUTE)
-   - Infrastructure Design (EXECUTE)
-   - Code Generation (EXECUTE — Part 1 Planning + Part 2 Generation)
-   - Build and Test (EXECUTE — Validação PBT e integração)
-3. **OPERATIONS PHASE**:
-   - Operations (PLACEHOLDER)
-
----
-
-## Phases to Execute & Rationale
+## Phases to Execute
 
 ### 🔵 INCEPTION PHASE
-- [x] **Workspace Detection** (COMPLETED)
-- [x] **Reverse Engineering** (COMPLETED)
-- [x] **Requirements Analysis** (COMPLETED)
-- [x] **User Stories** (COMPLETED)
-- [x] **Workflow Planning** (COMPLETED)
-- [ ] **Application Design** (EXECUTE)
-  - *Rationale*: A integração de LangGraph, LangSmith, Bridge Daemon e novos contratos de API requer uma modelagem de arquitetura formal de componentes e fluxos de estado.
-- [ ] **Units Generation** (EXECUTE)
-  - *Rationale*: O sistema possui escopo amplo e deve ser decomposto em 6 unidades modulares de desenvolvimento.
+- [x] Workspace Detection (COMPLETED)
+- [x] Reverse Engineering (COMPLETED)
+- [x] Requirements Analysis (COMPLETED)
+- [x] User Stories (COMPLETED)
+- [x] Execution Plan (IN PROGRESS)
+- [ ] Application Design - EXECUTE
+  - **Rationale**: Precisamos mapear os novos payloads de Socket.IO para o Streaming, os novos métodos no AI-Manager para Structured Outputs e o protocolo de Commit-Diff.
+- [ ] Units Generation - EXECUTE
+  - **Rationale**: Quebrar o escopo em unidades gerenciáveis para o backend, UI e Integração.
 
-### 🟢 CONSTRUCTION PHASE (Per-Unit Execution)
-- [ ] **Functional Design** (EXECUTE)
-  - *Rationale*: Definir detalhadamente a lógica de transição de estados do LangGraph, payloads do daemon e schemas de snapshot.
-- [ ] **NFR Requirements** (EXECUTE)
-  - *Rationale*: Implementar requisitos das 3 extensões ativadas (Security, Resiliency, PBT).
-- [ ] **NFR Design** (EXECUTE)
-  - *Rationale*: Incorporar circuit breakers, checkpointer seguro e geradores PBT.
-- [ ] **Infrastructure Design** (EXECUTE)
-  - *Rationale*: Definir comunicação de processos locais (`agy`), variáveis do LangSmith e configuração S3.
-- [ ] **Code Generation** (EXECUTE - ALWAYS)
-  - *Rationale*: Planejamento passo a passo e geração de código em TypeScript/React.
-- [ ] **Build and Test** (EXECUTE - ALWAYS)
-  - *Rationale*: Execução da suíte de testes unitários, integração e PBT.
+### 🟢 CONSTRUCTION PHASE
+- [ ] Functional Design - EXECUTE
+  - **Rationale**: Desenhar os algoritmos específicos da "sliding window", o Retry Backoff e o streaming generator para o modelo local.
+- [ ] NFR Requirements - SKIP
+  - **Rationale**: Já englobados na análise de requisitos inicial (Segurança, Performance, Resiliência).
+- [ ] NFR Design - SKIP
+  - **Rationale**: Será integrado no Functional Design (não necessita passo em separado).
+- [ ] Infrastructure Design - SKIP
+  - **Rationale**: A topologia não muda (mesmo servidor, mesma porta, mesmo DB SQLite e WebSocket).
+- [ ] Code Generation - EXECUTE (ALWAYS)
+  - **Rationale**: Implementation planning and code generation needed
+- [ ] Build and Test - EXECUTE (ALWAYS)
+  - **Rationale**: Build, test, and verification needed. A validação Red/Blue adversarial e Testes de Propriedade será ativada!
 
----
+### 🟡 OPERATIONS PHASE
+- [ ] Operations - PLACEHOLDER
+  - **Rationale**: Future deployment and monitoring workflows
 
-## Package Update Sequence
+## Estimated Timeline
+- **Total Phases**: 6 (AD, UG, FD, CG, BT)
+- **Estimated Duration**: 2-3 sessões interativas.
 
-1. **`@ai-dlc/sdk`**: Atualizar tipos de dados (`Message`, `AgentState`, `InterruptPayload`) e métodos de cliente.
-2. **`.agent/skills/`**: Gerar o catálogo completo de skills especializadas para os agentes.
-3. **`@ai-dlc/server`**:
-   - Instalar `@langchain/langgraph` e `langsmith`.
-   - Implementar a máquina de estados do LangGraph, Supervisor node e checkpointers.
-   - Implementar o `bridge-daemon` para disparo seguro de instâncias `agy`.
-   - Adicionar endpoints de interrupção/retomada, auto-setup e backup S3.
-4. **`web`**:
-   - Criar Cockpit HITL no Dashboard com controles de pausa, intervenção e cards de aprovação de `interrupt()`.
-   - Atualizar feed em tempo real e visualizador de telemetria LangSmith.
-5. **Suíte de Testes & Verificação**:
-   - Implementar suíte de testes com PBT (fast-check) e simulações completas de diálogo autônomo.
-
----
-
-## Success Criteria & Quality Gates
-
-- ✅ **Convergência Autônoma**: Múltiplos agentes conversam e resolvem tarefas sem loop infinito.
-- ✅ **Governança Humana**: Toda decisão crítica aciona `interrupt()` e aguarda 1 clique no Dashboard.
-- ✅ **Observabilidade LangSmith**: 100% das execuções possuem traces com métricas de tokens e latência.
-- ✅ **Segurança e Resiliência**: Zero blocking security findings e RPO = 0 garantido no SQLite.
-- ✅ **Testes PBT**: 100% dos testes de invariantes e round-trip aprovados.
+## Success Criteria
+- **Primary Goal**: Sistema tolerante a falhas do provedor LLM, 100% livre de JSON manual e UI hiper-reativa.
+- **Key Deliverables**: Códigos refatorados, testes PBT (Property-based) passando, Streaming real funcionando.
+- **Quality Gates**: Passar pela bateria de testes PBT (Property-Based Testing) focados na resiliência e validação Security (Red Team) testando prompt injections nos novos métodos.

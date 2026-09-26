@@ -1,70 +1,31 @@
-# Component Dependency & Communication Patterns: Hivemind Autonomous Ecosystem
+# Component Dependencies
 
-## 1. Component Dependency Matrix
+## Dependency Matrix
 
-| Componente Origem | Componente Destino | Tipo de Dependência | Protocolo / Mecanismo |
-|---|---|---|---|
-| `LangGraphOrchestrator` | `SQLiteSaver / Database` | Persistência de Checkpoints | `better-sqlite3` (Síncrono/Transacional) |
-| `LangGraphOrchestrator` | `BridgeDaemon` | Disparo de Agentes Especialistas | In-Process Event / IPC |
-| `LangGraphOrchestrator` | `TelemetryService` | Traces & Spans de Nós | `langsmith` SDK (Async) |
-| `BridgeDaemon` | `Antigravity CLI (agy)` | Execução de Agentes Locais | `child_process.spawn` (Subprocesso) |
-| `BridgeDaemon` | `MessagesRouter / Express` | Publicação de Respostas | REST / In-Memory Service |
-| `Cockpit HITL UI (web)` | `Server API (/interrupt/resume)` | Aprovação Humana de Decisões | HTTP POST / WebSocket |
-| `TelemetryService` | `LangSmith Cloud` | Observabilidade & Tracing | HTTPS (TLS 1.3) |
-| `CloudSnapshotService` | `AWS S3 API` | Upload/Download de Snapshots | AWS SDK v3 (`@aws-sdk/client-s3`) |
-| `ProjectSetupService` | `CodebaseMemory MCP` | Indexação do Grafo de Código | MCP Protocol (JSON-RPC) |
+| Component | Depends On | Reason |
+| :--- | :--- | :--- |
+| **AIManager** | `PromptRegistry` | Buscar as regras do sistema (hot-reload) |
+| **AIManager** | `RecoveryCache` | Salvar tentativas no Redis/MemCache |
+| **LangGraphOrchestrator** | `AIManager` | Executar o modelo e receber o AsyncGenerator streamado |
+| **LangGraphOrchestrator** | `SocketGateway` | Emitir deltas (`typing`) e `status` para a UI |
+| **LangGraphOrchestrator** | `GitSupervisor` | Se ao finalizar houver File Edits, invoca o CLI do git |
+| **SocketGateway** | `Cockpit UI` (Client) | Contrato de rede via WebSockets (emissão/escuta) |
+| **CommitApprovalService** | `SocketGateway` | Aguardar o callback (Aprovação) via Socket |
+| **CommitApprovalService** | `GitSupervisor` | Rodar `mergeAndCommit` na aprovação |
 
----
+## Data Flow: Real-time Streaming
+1. `LangGraph` inicia o Node do Agente.
+2. Invoca `SocketGateway.emitAgentStatus('thinking')`.
+3. Pede ao `PromptRegistry` o system prompt em MD.
+4. Pede ao `AIManager` o `streamChat`.
+5. Para cada chunk recebido via yield, emite `SocketGateway.emitAgentTyping(delta)`.
+6. Terminado, emite `SocketGateway.emitAgentStatus('idle')`.
 
-## 2. Communication Architecture & Data Flow
-
-```mermaid
-flowchart LR
-    subgraph CLIENT["🖥️ Client Layer (Browser)"]
-        UI["React 19 Dashboard<br/>(Cockpit HITL + Live Feed)"]
-    end
-
-    subgraph SERVER["⚙️ Server Layer (@ai-dlc/server)"]
-        REST["Express REST API &<br/>Socket.IO Server"]
-        LG["LangGraph Orchestrator<br/>(Supervisor & StateGraph)"]
-        DB[(SQLite DB &<br/>Checkpointer)]
-        BD["Bridge Daemon<br/>(CLI Runner & Queue)"]
-        TEL["Telemetry Service<br/>(LangSmith Client)"]
-        SNAP["Snapshot Service<br/>(S3 Adapter)"]
-    end
-
-    subgraph RUNTIME["💻 Local Environment"]
-        AGY["Antigravity CLI<br/>(agy subagents)"]
-        FS["Workspace Files &<br/>.aidlc / .agent"]
-    end
-
-    subgraph CLOUD["☁️ External Cloud Services"]
-        LS["LangSmith Platform<br/>(Traces & Metrics)"]
-        S3["AWS S3 Bucket<br/>(Encrypted Snapshots)"]
-    end
-
-    UI <-->|WebSocket / REST| REST
-    REST <--> LG
-    LG <--> DB
-    LG <--> BD
-    LG --> TEL
-    BD -->|spawn / IPC| AGY
-    AGY <--> FS
-    TEL -->|HTTPS| LS
-    SNAP -->|AWS SDK| S3
-```
-
----
-
-## 3. Communication Patterns
-
-1. **Assíncrono & Orientado a Eventos (Socket.IO + Fila)**:
-   - Mensagens trocadas entre agentes e comandos do Supervisor são publicadas imediatamente na sala do projeto (`project_${projectId}`).
-   - O Bridge Daemon consome eventos da fila com controle de concorrência.
-
-2. **Pausa & Retomada Transacional (LangGraph Checkpoints)**:
-   - Toda transição de nó é persistida no SQLite antes da execução do próximo passo.
-   - Quando um `interrupt()` é acionado, o estado fica congelado em `waiting_human`. A requisição do cliente `/resume` reativa o grafo do ponto exato onde parou sem perda de contexto.
-
-3. **Isolamento de Subprocessos com Sanitização**:
-   - Cada chamada ao `agy` CLI é executada em um processo isolado, evitando que falhas de script ou loops travem o processo principal do servidor Node.js.
+## Data Flow: Git Auto-Commit
+1. Agentes aplicam alterações em arquivos numa branch local (via LangChain tools).
+2. `LangGraph` finaliza rodada.
+3. Invoca `GitSupervisor.generateDiff()`.
+4. `SocketGateway.emitGitDiff(diffText)` para a UI do Cockpit.
+5. Cockpit renderiza Modal de aprovação.
+6. Humano clica em "Approve". UI emite Socket Event `git_commit_approved`.
+7. `CommitApprovalService` captura o evento e chama `GitSupervisor.mergeAndCommit()`.

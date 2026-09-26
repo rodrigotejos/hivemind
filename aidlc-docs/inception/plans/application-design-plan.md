@@ -1,37 +1,71 @@
 # Application Design Plan
 
-## Purpose
-Modelar a arquitetura técnica de alto nível, os componentes de software, métodos, serviços orquestradores e matriz de dependências do ecossistema Hivemind com LangGraph, LangSmith, Bridge Daemon e Cockpit HITL.
-
----
+## Methodology and Approach
+Este design foca em estender as fronteiras do `ai-manager` e `bridge-daemon` para suportar WebSockets em Streaming, Prompts dinâmicos, Retry Patterns e integração com CLI Git. Identificaremos as assinaturas de métodos necessárias para viabilizar as 8 histórias de usuário aprovadas, sem ainda detalhar o código interno (o que será feito na fase Construction).
 
 ## Execution Checklist
 
-- [x] **Step 1: Identificação de Componentes & Responsabilidades**
-  - [x] Mapear componentes do Backend (`@ai-dlc/server`), Frontend (`web`), SDK (`@ai-dlc/sdk`), Bridge Daemon e Skills (`.agent/skills/`)
-  - [x] Gerar `aidlc-docs/inception/application-design/components.md`
-
-- [x] **Step 2: Definição de Interfaces e Métodos**
-  - [x] Especificar assinaturas tipadas, payloads de entrada/saída e contratos
-  - [x] Gerar `aidlc-docs/inception/application-design/component-methods.md`
-
-- [x] **Step 3: Definição da Camada de Serviços & Orquestração**
-  - [x] Modelar o StateGraph do LangGraph, nó Supervisor, checkpointer SQLite, LangSmith tracer, Bridge Daemon e S3 Snapshot adapter
-  - [x] Gerar `aidlc-docs/inception/application-design/services.md`
-
-- [x] **Step 4: Mapeamento de Dependências e Padrões de Comunicação**
-  - [x] Elaborar matriz de dependências e diagramas de fluxo de dados
-  - [x] Gerar `aidlc-docs/inception/application-design/component-dependency.md`
-
-- [x] **Step 5: Documento Consolidado de Design de Aplicação**
-  - [x] Gerar `aidlc-docs/inception/application-design/application-design.md`
+- [ ] 1. Read the approved answers from the embedded questions in this plan.
+- [ ] 2. Generate `components.md` identifying the main architectural blocks afetados (ex: AIManager, SocketGateway, PromptRegistry, GitSupervisor).
+- [ ] 3. Generate `component-methods.md` definindo as novas assinaturas (ex: `streamAgentResponse`, `commitDiff`).
+- [ ] 4. Generate `services.md` detalhando a camada de orquestração (ex: `LangGraphService` orquestrando o Retry Backoff).
+- [ ] 5. Generate `component-dependency.md` mostrando a matriz de comunicação e o novo fluxo de dados (Server-Streaming -> UI).
+- [ ] 6. Consolidate into `application-design.md`.
 
 ---
 
-## Design Decisions Summary (Pre-Approved)
+## Clarification Questions
 
-1. **State Machine Framework**: `@langchain/langgraph` com nós tipados (`Supervisor`, `AgentWorker`, `HumanGate`) e persistência via SQLite Checkpointer.
-2. **Observability Stack**: `langsmith` SDK instrumentando nós, spans de LLM e execuções do `agy` CLI.
-3. **Execution Runtime**: `child_process.spawn` gerenciado pelo `BridgeDaemon` com controle de concorrência, timeouts e circuit breaker.
-4. **Human Interaction Pattern**: `interrupt()` nativo do LangGraph + endpoint REST `/api/projects/:id/resume` acionado pelo botão no React 19 Dashboard.
-5. **Persistence & Backup**: SQLite transacional local (`better-sqlite3`) + adapter AWS S3 para snapshots criptografados (`@aws-sdk/client-s3`).
+Para gerar um design arquitetural preciso, por favor, responda:
+
+### Question 1: Socket.IO Streaming Protocol
+Como os chunks de texto devem ser trafegados via WebSocket para a UI?
+
+A) Emitir um evento `agent_typing` passando apenas o delta (chunk mais recente) para economizar banda, e a UI concatena.
+
+B) Emitir um evento `agent_typing` passando o texto completo gerado até o momento, facilitando a vida do frontend sem depender de estado interno complexo.
+
+C) Usar Server-Sent Events (SSE) em vez de Socket.IO apenas para a rota de resposta.
+
+X) Other (please describe after [Answer]: tag below)
+
+[Answer]: 
+
+### Question 2: Prompt Registry
+Onde o sistema deve carregar os prompts desacoplados (hot-reload)?
+
+A) Arquivos Markdown (`.md`) no File System, lidos dinamicamente a cada chamada ou cacheados com um watcher.
+
+B) Tabela no banco de dados SQLite, com uma UI simples futuramente para editar os prompts.
+
+C) Um único arquivo JSON grande de configuração lido no boot da aplicação.
+
+X) Other (please describe after [Answer]: tag below)
+
+[Answer]: 
+
+### Question 3: Git Auto-Commit Integration
+Como o backend Node.js (`server`) deve aplicar as mudanças no repositório antes de solicitar a aprovação do usuário?
+
+A) Os agentes geram um arquivo JSON com "patches" (diff struct), que é enviado para a UI. Se a UI aprovar, o `server` aplica o patch e executa os comandos `git`.
+
+B) Os agentes escrevem as mudanças no File System criando uma nova branch git, a UI exibe o diff nativo do git, e se aprovado, o `server` faz o merge e commit.
+
+C) Os agentes sobrescrevem os arquivos diretamente na branch atual, o `server` tira o diff das alterações unstaged para a UI aprovar, e se sim, faz `git add/commit`. (Mais fácil, mas com risco de código quebrado no diretório de trabalho caso rejeitado).
+
+X) Other (please describe after [Answer]: tag below)
+
+[Answer]: 
+
+### Question 4: Auto-Recovery Storage
+O estado temporário das "retentativas de LLM" precisa ser persistido caso a API demore muitos minutos para voltar?
+
+A) Não, manter na memória (MemCache/Variables) do processo do `server` é suficiente. Se reiniciar o node, perde o progresso daquele nó.
+
+B) Sim, gravar o status "retrying" no banco SQLite para que o Cockpit possa consultar mesmo se reconectar.
+
+C) Usar um Redis/In-memory Cache externo.
+
+X) Other (please describe after [Answer]: tag below)
+
+[Answer]: 
