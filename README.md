@@ -1,8 +1,35 @@
 # Hivemind — AI-DLC (AI Development Lifecycle Coordinator)
 
-O **AI-DLC** é um orquestrador projetado para gerenciar a comunicação e colaboração de múltiplos agentes de Inteligência Artificial e humanos trabalhando em projetos de código. 
+O **Hivemind** é um orquestrador avançado projetado para gerenciar a comunicação, colaboração e governança de múltiplos agentes de Inteligência Artificial e humanos trabalhando em projetos de código conforme o ciclo **AI-DLC** (AI-Driven Development Life Cycle).
 
-O sistema expõe uma API REST/WebSockets para os agentes enviarem logs e mensagens, enquanto o humano acompanha o progresso e responde a impedimentos através de um Dashboard em tempo real.
+O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisões e impedimentos, enquanto o coordenador humano acompanha o progresso em tempo real pelo **Cockpit Dashboard**.
+
+---
+
+## 🏛️ Arquitetura e Inovações (Iteração 2 - Unit 1)
+
+### 1. 🛡️ Structured Output com Reflection Loop (US-5, Security Baseline)
+- **Validação Estrita via Zod**: Classificação e triagem de mensagens (`MessagePrioritySchema`) sem uso de expressões regulares frágeis.
+- **Autocorreção da LLM (Reflection Loop)**: Se a resposta da LLM violar o schema JSON, o erro detalhado do Zod é reenviado automaticamente para a LLM se autocorrigir (até 2 tentativas) antes de lançar erro controlado.
+
+### 2. 🪟 Sliding Window & Sumarização Recursiva (US-6, Performance)
+- **Token Budgeting Inteligente**: O método `calculateTokenWindow` analisa o consumo real de tokens. Quando o histórico excede o orçamento de segurança, mensagens antigas são condensadas recursivamente em uma âncora `[RESUMO DO HISTÓRICO ANTERIOR]`, mantendo as mensagens recentes intactas.
+
+### 3. 📄 Prompt Registry Desacoplado com Hot-Reload (US-7)
+- **Zero Strings Hardcoded**: Prompts de agentes residem em `packages/server/prompts/*.json` (`triage.json`, `beta_backend.json`, `gamma_qa.json`, `delta_security.json`, etc.).
+- **Hot-Reload em Tempo Real**: Carregamento dinâmico com checagem de `mtime`, permitindo alterar diretivas sem reiniciar o servidor.
+- **Proteção Anti-Injection**: Sanitização automática de delimitadores de sistema (`<system>`, `<instructions>`).
+
+### 4. 💓 Heartbeat Lease Manager (US-8, Resiliency Baseline)
+- **Eliminação de Timeouts Rígidos**: Substituição do timeout estático de 300000ms por leases renováveis de 60 segundos com base na emissão de chunks pelo subprocesso.
+- **Encerramento Gracioso em Duas Fases**: `SIGTERM` imediato com janela de carência (grace period de 5s) antes de aplicar `SIGKILL`.
+
+### 5. 🧪 Property-Based Testing com `fast-check` (PBT Baseline)
+- Testes procedurais com centenas de execuções aleatórias garantindo:
+  - `PBT-U1-01`: Invariante de orçamento de tokens nunca violada.
+  - `PBT-U1-02`: Conformidade estrita com schemas Zod.
+  - `PBT-U1-03`: Integridade de sanitização contra injeções.
+  - `PBT-U1-04`: Monotonicidade determinística da expiração de leases.
 
 ---
 
@@ -30,7 +57,18 @@ Compila o código TypeScript em todos os pacotes:
 npm run build
 ```
 
-### 4. Rodar o Servidor de Desenvolvimento
+### 4. Rodar a Suíte de Testes (Unit & PBT)
+Para rodar os testes unitários e de propriedades da Unit 1:
+```bash
+cd packages/server
+npx ts-node -T tests/unit/prompt-registry.test.ts
+npx ts-node -T tests/unit/sliding-window.test.ts
+npx ts-node -T tests/unit/structured-output.test.ts
+npx ts-node -T tests/unit/heartbeat-lease-manager.test.ts
+npx ts-node -T tests/pbt/unit-1-invariants.test.ts
+```
+
+### 5. Rodar o Servidor de Desenvolvimento
 Inicia concorrentemente o SDK, o servidor backend (na porta `3001`) e o painel frontend web (na porta `5173`):
 ```bash
 npm run dev
@@ -55,15 +93,8 @@ npm run dev
 
 ---
 
-## 💬 Integração com Seus Agentes Externos
-
-Se você tiver agentes externos em execução e quiser conectá-los a este ecossistema para que eles atualizem o "Super Resumo" e troquem mensagens:
-
-* 📄 **Prompt de Referência**: O prompt que você deve copiar e injetar nas suas IAs está salvo no arquivo [agent-delegation-prompt.md](./agent-delegation-prompt.md).
-* **ID do Projeto**: O ID do projeto gerado pode ser consultado após rodar o comando `clean-bi.js` e deve ser configurado no prompt do agente.
-
----
-
-## 📁 Registro de Alterações e Contexto
-
-Todas as alterações estruturais, logs de desenvolvimento e histórico de correções estão documentados de forma contínua no arquivo [.gemini](./.gemini) para manter a memória do projeto.
+## 📁 Registro do AI-DLC e Documentação
+Toda a documentação gerada pelo fluxo AI-DLC encontra-se estruturada em `aidlc-docs/`:
+- `aidlc-docs/inception/`: Requirements analysis, user stories, application design e unit of work.
+- `aidlc-docs/construction/`: Functional designs, code generation summaries e relatórios de build & test.
+- `aidlc-docs/audit.md`: Log de auditoria formal de cada decisão e aprovação humana.
