@@ -1,6 +1,8 @@
 import { ChatGoogleGenerativeAI } from '@langchain/google-genai';
 import { PromptTemplate } from 'langchain/prompts';
+import { z } from 'zod';
 import * as queries from '../db/queries';
+import { PromptRegistry } from './prompt-registry';
 
 const modelCache = new Map<string, ChatGoogleGenerativeAI>();
 
@@ -12,6 +14,20 @@ export interface ModelResolution {
   reasoningLevel: ReasoningLevel;
   thinkingBudget: number;
 }
+
+/**
+ * Zod Schema para triagem e análise estruturada de mensagens (US-5, Security Baseline).
+ */
+export const MessagePrioritySchema = z.object({
+  priority: z.enum(['low', 'normal', 'high', 'critical']),
+  needsHuman: z.boolean(),
+  conflictRisk: z.boolean(),
+  reasoning: z.string().optional(),
+  category: z.enum(['question', 'decision', 'blocker', 'info', 'security']).optional(),
+  tags: z.array(z.string()).default([])
+});
+
+export type MessagePriorityPayload = z.infer<typeof MessagePrioritySchema>;
 
 /**
  * Retorna o modelo meta de roteamento interno (Gerenciador do Modo Auto).
@@ -64,7 +80,7 @@ export function resolveModelConfig(
   // Mapeamento normalizado para a API do Google Gemini 3
   let actualModelName = 'gemini-3.7-flash';
   if (targetModel.includes('flex')) {
-    actualModelName = 'gemini-3.5-flash-lite'; // Modo Flex: ultra econômico e rápido
+    actualModelName = 'gemini-3.5-flash-lite';
   } else if (targetModel.includes('3.5-flash-lite') || targetModel.includes('lite')) {
     actualModelName = 'gemini-3.5-flash-lite';
   } else if (targetModel.includes('3.6-flash')) {
@@ -72,7 +88,7 @@ export function resolveModelConfig(
   } else if (targetModel.includes('3.5-flash')) {
     actualModelName = 'gemini-3.5-flash';
   } else if (targetModel.includes('3.1-pro') || targetModel.includes('pro')) {
-    actualModelName = 'gemini-3.7-flash'; // 3.7 Flash Thinking como flagship de raciocínio profundo
+    actualModelName = 'gemini-3.7-flash';
   } else if (targetModel.includes('2.5-flash')) {
     actualModelName = 'gemini-2.5-flash';
   } else {
@@ -122,6 +138,126 @@ export function getModel(
   return modelCache.get(actualModelName) || null;
 }
 
+/**
+ * Estimativa rápida de tokens (média de 4 caracteres por token em texto/código)
+ */
+export function estimateTokenCount(text: string): number {
+  if (!text) return 0;
+  return Math.ceil(text.length / 4);
+}
+
+/**
+ * Calcula a janela deslizante de mensagens com Sumarização Recursiva das mensagens antigas (US-6).
+ */
+export async function calculateTokenWindow(
+  messages: any[],
+  maxTokens: number = 8000,
+  projectId?: string
+): Promise<{ messages: any[]; isSummarized: boolean; summaryHeader?: string }> {
+  if (!messages || messages.length === 0) {
+    return { messages: [], isSummarized: false };
+  }
+
+  let totalEstimatedTokens = messages.reduce((acc, m) => acc + estimateTokenCount(m.content || ''), 0);
+
+  // Se cabe dentro do budget, retorna na íntegra
+  if (totalEstimatedTokens <= maxTokens) {
+    return { messages, isSummarized: false };
+  }
+
+  // Se excede, preserva as últimas 10 mensagens (ou metade) e sumariza o histórico anterior
+  const recentCount = Math.max(5, Math.min(15, Math.floor(messages.length / 2)));
+  const olderMessages = messages.slice(0, messages.length - recentCount);
+  const recentMessages = messages.slice(messages.length - recentCount);
+
+  let condensedSummary = '';
+  if (olderMessages.length > 0) {
+    try {
+      const model = getAutoRouterModel() || getModel('gemini-3.5-flash-lite');
+      if (model) {
+        const textToSummarize = olderMessages
+          .map(m => `[${m.fromAgentId || m.agentId || 'User'}]: ${m.content}`)
+          .join('\n');
+        
+        const summaryPrompt = `Resuma de forma ultra-concisa em no máximo 2 parágrafos o histórico anterior das seguintes mensagens de projeto de software:\n\n${textToSummarize.slice(0, 10000)}`;
+        const res = await model.invoke(summaryPrompt);
+        condensedSummary = (res as any).content as string;
+      }
+    } catch (err) {
+      console.warn('Erro ao sumarizar bloco antigo, usando fallback truncado:', err);
+      condensedSummary = `[Histórico anterior de ${olderMessages.length} mensagens condensado por limite de tokens.]`;
+    }
+  }
+
+  const summaryMessage = {
+    id: 'summary-anchor',
+    fromAgentId: 'system-summarizer',
+    content: `[RESUMO DO HISTÓRICO ANTERIOR]: ${condensedSummary || 'Discussão preliminar em andamento.'}`,
+    type: 'statement',
+    priority: 'normal',
+    timestamp: new Date().toISOString()
+  };
+
+  const finalMessages = [summaryMessage, ...recentMessages];
+  return {
+    messages: finalMessages,
+    isSummarized: true,
+    summaryHeader: condensedSummary
+  };
+}
+
+/**
+ * Invoca a LLM com garantia de saída estruturada Zod e Reflection Loop de autocorreção (US-5, Resiliency Baseline).
+ */
+export async function generateStructuredOutput<T>(
+  schema: z.ZodSchema<T>,
+  systemPrompt: string,
+  userMessage: string,
+  modelInstance?: ChatGoogleGenerativeAI | null,
+  maxReflectionAttempts: number = 2
+): Promise<T> {
+  const model = modelInstance || getAutoRouterModel() || getModel('gemini-3.5-flash-lite');
+  if (!model) {
+    throw new Error('Provedor LLM não disponível para Structured Output.');
+  }
+
+  let prompt = `${systemPrompt}\n\nMENSAGEM:\n${userMessage}\n\nRetorne EXATAMENTE um objeto JSON válido.`;
+  let lastError = '';
+
+  for (let attempt = 0; attempt <= maxReflectionAttempts; attempt++) {
+    try {
+      const result = await model.invoke(prompt);
+      const rawText = ((result as any).content as string) || '';
+      
+      // Sanitização de blocos markdown
+      const cleaned = rawText
+        .replace(/^```json\s*/i, '')
+        .replace(/^```\s*/i, '')
+        .replace(/```\s*$/i, '')
+        .trim();
+
+      const jsonParsed = JSON.parse(cleaned);
+      const validation = schema.safeParse(jsonParsed);
+
+      if (validation.success) {
+        return validation.data;
+      }
+
+      // Falha na validação do Zod -> Monta Reflection Loop para a próxima tentativa
+      lastError = JSON.stringify(validation.error.format());
+      console.warn(`[StructuredOutput] Tentativa ${attempt + 1} falhou validação Zod: ${lastError}. Acionando Reflection Loop...`);
+      
+      prompt = `${systemPrompt}\n\nMENSAGEM ANTERIOR:\n${userMessage}\n\nSUA RESPOSTA ANTERIOR FOI INVÁLIDA:\n${rawText}\n\nERRO DE SCHEMA ENCONTRADO:\n${lastError}\n\nCorrija imediatamente e retorne SOMENTE o JSON corrigido estritamente aderente ao schema solicitado.`;
+    } catch (err: any) {
+      lastError = err?.message || String(err);
+      console.warn(`[StructuredOutput] Erro de parse JSON na tentativa ${attempt + 1}: ${lastError}`);
+      prompt = `${systemPrompt}\n\nMENSAGEM:\n${userMessage}\n\nA resposta anterior não foi um JSON válido. Retorne EXATAMENTE um JSON puro sem markdown ou texto explicativo.`;
+    }
+  }
+
+  throw new Error(`Falha definitiva ao produzir JSON estruturado após ${maxReflectionAttempts + 1} tentativas. Último erro: ${lastError}`);
+}
+
 export async function summarizeProject(projectId: string, modelName?: string, reasoningLevel?: ReasoningLevel): Promise<string> {
   const project = queries.getProject(projectId);
   const messages = queries.getProjectMessages(projectId);
@@ -131,20 +267,22 @@ export async function summarizeProject(projectId: string, modelName?: string, re
     return 'Resumo simulado: O projeto está em andamento. Foram trocadas ' + messages.length + ' mensagens.';
   }
 
-  const prompt = PromptTemplate.fromTemplate(`
-    Resuma o estado atual do projeto {projectName}.
-    Mensagens recentes:
-    {messages}
-    
-    Forneça um resumo conciso (máx 3 parágrafos) do que foi feito, blockeios e próximos passos.
-  `);
+  // Usa o PromptRegistry desacoplado (US-7)
+  const registry = PromptRegistry.getInstance();
+  let rendered;
+  try {
+    rendered = registry.renderPrompt('summarize_project', {
+      projectName: project ? (project as any).name : projectId,
+      messages: JSON.stringify(messages.slice(-25))
+    });
+  } catch {
+    rendered = {
+      fullText: `Resuma o estado atual do projeto ${project ? (project as any).name : projectId}.\nMensagens: ${JSON.stringify(messages.slice(-20))}`
+    };
+  }
 
   try {
-    const chain = prompt.pipe(model as any);
-    const result = await chain.invoke({
-      projectName: project ? (project as any).name : projectId,
-      messages: JSON.stringify(messages.slice(-20)),
-    });
+    const result = await model.invoke(rendered.fullText);
     return (result as any).content as string;
   } catch (err) {
     console.error('AI Summarize Error:', err);
@@ -153,8 +291,7 @@ export async function summarizeProject(projectId: string, modelName?: string, re
 }
 
 /**
- * Análise de prioridade e risco das mensagens.
- * Utiliza estritamente 3.5 Flash Lite sem raciocínio (Reasoning: OFF) para classificação instantânea sem gasto de tokens.
+ * Análise de prioridade e risco das mensagens com Structured Output e Reflection Loop (US-5).
  */
 export async function analyzeMessagePriority(
   messageContent: string, 
@@ -167,7 +304,6 @@ export async function analyzeMessagePriority(
   conflictRisk: boolean,
   resolvedModel?: string
 }> {
-  // Gerenciamento e classificação utilizam 3.5 Flash Lite com Reasoning OFF
   const model = getAutoRouterModel() || getModel(modelName, messageContent, reasoningLevel);
 
   if (!model) {
@@ -181,31 +317,43 @@ export async function analyzeMessagePriority(
     };
   }
 
-  const prompt = PromptTemplate.fromTemplate(`
-    Analise a seguinte mensagem enviada por um agente em um projeto de software.
-    Contexto do projeto: {context}
-    
-    Mensagem: "{message}"
-    
-    Responda EXATAMENTE em formato JSON com 3 propriedades:
-    "priority": "low" | "normal" | "high" | "critical"
-    "needsHuman": true | false (O gerente humano precisa intervir?)
-    "conflictRisk": true | false (Há risco de conflito de código?)
-  `);
+  const registry = PromptRegistry.getInstance();
+  let systemDirective = `Analise a mensagem de um agente e forneça estritamente JSON com priority, needsHuman, conflictRisk. Contexto: ${projectContext}`;
+  try {
+    const rendered = registry.renderPrompt('triage', {
+      projectName: 'Projeto Atual',
+      messageContent
+    });
+    systemDirective = rendered.fullText;
+  } catch {
+    // Mantém fallback limpo
+  }
 
   try {
-    const chain = prompt.pipe(model as any);
-    const result = await chain.invoke({
-      context: projectContext,
-      message: messageContent
-    });
-    const text = (result as any).content as string;
-    const jsonStr = text.replace(/```json/g, '').replace(/```/g, '').trim();
-    const parsed = JSON.parse(jsonStr);
-    return { ...parsed, resolvedModel: 'gemini-3.5-flash-lite' };
+    const structured = await generateStructuredOutput(
+      MessagePrioritySchema,
+      systemDirective,
+      messageContent,
+      model,
+      2
+    );
+
+    return {
+      priority: structured.priority,
+      needsHuman: structured.needsHuman,
+      conflictRisk: structured.conflictRisk,
+      resolvedModel: 'gemini-3.5-flash-lite'
+    };
   } catch (e) {
-    console.error('Failed to parse AI response', e);
-    return { priority: 'normal', needsHuman: false, conflictRisk: false, resolvedModel: 'gemini-3.5-flash-lite' };
+    console.error('[analyzeMessagePriority] Falha após reflection loop:', e);
+    const lc = messageContent.toLowerCase();
+    const isCritical = lc.includes('block') || lc.includes('erro') || lc.includes('crítico');
+    return { 
+      priority: isCritical ? 'critical' : 'normal', 
+      needsHuman: isCritical, 
+      conflictRisk: false, 
+      resolvedModel: 'gemini-3.5-flash-lite' 
+    };
   }
 }
 

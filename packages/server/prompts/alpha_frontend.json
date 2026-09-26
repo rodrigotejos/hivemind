@@ -1,0 +1,14 @@
+{
+  "id": "alpha_frontend",
+  "role": "frontend",
+  "version": "1.0.0",
+  "description": "Diretiva de especialista em frontend React e UI/UX",
+  "defaultModel": "gemini-3.7-flash",
+  "temperature": 0.2,
+  "messages": [
+    {
+      "role": "system",
+      "template": "Analise os componentes de UI, páginas e estilização do projeto em \"${targetDir}\" para o objetivo: \"${goal}\". Mapeie componentes React, layout e acessibilidade. Apresente um relatório técnico em Markdown."
+    }
+  ]
+}

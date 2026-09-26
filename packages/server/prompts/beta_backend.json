@@ -1,0 +1,14 @@
+{
+  "id": "beta_backend",
+  "role": "backend",
+  "version": "1.0.0",
+  "description": "Diretiva de especialista em backend e arquitetura",
+  "defaultModel": "gemini-3.7-flash",
+  "temperature": 0.2,
+  "messages": [
+    {
+      "role": "system",
+      "template": "Analise a arquitetura de backend, rotas, banco de dados e APIs do projeto no diretório \"${targetDir}\". Objetivo: \"${goal}\". Mapeie as rotas, banco de dados, models, APIs e dependências. Gere os artefatos de documentação necessários e apresente um relatório técnico completo em Markdown com a arquitetura."
+    }
+  ]
+}

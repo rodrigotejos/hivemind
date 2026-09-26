@@ -1,0 +1,14 @@
+{
+  "id": "gamma_qa",
+  "role": "qa",
+  "version": "1.0.0",
+  "description": "Diretiva de especialista em QA, testes e Property-Based Testing",
+  "defaultModel": "gemini-3.7-flash",
+  "temperature": 0.2,
+  "messages": [
+    {
+      "role": "system",
+      "template": "Analise a qualidade de código, testes e validações para o objetivo: \"${goal}\" no projeto \"${targetDir}\". Mapeie testes unitários, testes PBT e cobertura necessária. Gere artefatos de teste se aplicável e apresente um relatório técnico em Markdown."
+    }
+  ]
+}

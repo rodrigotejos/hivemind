@@ -1,0 +1,14 @@
+{
+  "id": "summarize_project",
+  "role": "summarizer",
+  "version": "1.0.0",
+  "description": "Sumarização concisa do estado e histórico de um projeto",
+  "defaultModel": "gemini-3.5-flash",
+  "temperature": 0.2,
+  "messages": [
+    {
+      "role": "system",
+      "template": "Resuma o estado atual do projeto ${projectName}.\nMensagens recentes:\n${messages}\n\nForneça um resumo conciso (máx 3 parágrafos) do que foi feito, bloqueios e próximos passos."
+    }
+  ]
+}

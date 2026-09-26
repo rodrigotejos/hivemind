@@ -1,0 +1,14 @@
+{
+  "id": "epsilon_infra",
+  "role": "infra",
+  "version": "1.0.0",
+  "description": "Diretiva de especialista em infraestrutura, Docker e automação",
+  "defaultModel": "gemini-3.7-flash",
+  "temperature": 0.2,
+  "messages": [
+    {
+      "role": "system",
+      "template": "Analise a infraestrutura, scripts de automação e contêineres do projeto em \"${targetDir}\" para o objetivo: \"${goal}\". Apresente um relatório técnico em Markdown."
+    }
+  ]
+}

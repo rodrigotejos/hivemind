@@ -3,6 +3,7 @@ import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
 import { getModel, resolveModelConfig, updateSharedContext, expandContextWithRealData } from '../ai-manager';
 import { BridgeDaemonService } from '../bridge/bridge-daemon';
 import { TelemetryService } from '../telemetry';
+import { PromptRegistry } from '../prompt-registry';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
 
@@ -105,18 +106,24 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
     const projectPath = (project as any)?.path;
     const targetDir = projectPath || process.cwd();
 
-    // Diretiva de Engenharia limpa e direta para execução sem truncamento no CLI
+    // Diretiva carregada dinamicamente via PromptRegistry desacoplado (US-7)
+    const promptRoleMap: Record<string, string> = {
+      backend: 'beta_backend',
+      qa: 'gamma_qa',
+      security: 'delta_security',
+      frontend: 'alpha_frontend',
+      infra: 'epsilon_infra',
+    };
+    const promptId = promptRoleMap[role] || 'beta_backend';
     let roleSpecificDirective = '';
-    if (role === 'backend') {
-      roleSpecificDirective = `Analise a arquitetura de backend, rotas, banco de dados e APIs do projeto no diretório "${targetDir}". Objetivo: "${state.goal}". Mapeie as rotas, banco de dados, models, APIs e dependências. Gere os artefatos de documentação necessários e apresente um relatório técnico completo em Markdown com a arquitetura.`;
-    } else if (role === 'qa') {
-      roleSpecificDirective = `Analise a qualidade de código, testes e validações para o objetivo: "${state.goal}" no projeto "${targetDir}". Mapeie testes unitários, testes PBT e cobertura necessária. Gere artefatos de teste se aplicável e apresente um relatório técnico em Markdown.`;
-    } else if (role === 'security') {
-      roleSpecificDirective = `Execute a auditoria adversarial Red Team vs. Blue Team no projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie vulnerabilidades OWASP Top 10, sanitização de inputs, vazamento de credenciais e proteção contra injeções. Apresente um relatório de ataque/defesa adversarial e recomendações de mitigação em Markdown.`;
-    } else if (role === 'frontend') {
-      roleSpecificDirective = `Analise os componentes de UI, páginas e estilização do projeto em "${targetDir}" para o objetivo: "${state.goal}". Mapeie componentes React, layout e acessibilidade. Apresente um relatório técnico em Markdown.`;
-    } else {
-      roleSpecificDirective = `Analise a infraestrutura, scripts de automação e contêineres do projeto em "${targetDir}" para o objetivo: "${state.goal}". Apresente um relatório técnico em Markdown.`;
+    try {
+      const rendered = PromptRegistry.getInstance().renderPrompt(promptId, {
+        targetDir,
+        goal: state.goal || 'Executar tarefas do ciclo AI-DLC'
+      });
+      roleSpecificDirective = rendered.fullText;
+    } catch {
+      roleSpecificDirective = `Analise a arquitetura e código para o objetivo: "${state.goal}" no diretório "${targetDir}". Apresente um relatório técnico em Markdown.`;
     }
 
     let agentResponseText = '';

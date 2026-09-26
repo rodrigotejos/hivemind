@@ -1,0 +1,14 @@
+{
+  "id": "delta_security",
+  "role": "security",
+  "version": "1.0.0",
+  "description": "Diretiva de especialista em segurança adversarial Red Team vs. Blue Team",
+  "defaultModel": "gemini-3.7-flash",
+  "temperature": 0.2,
+  "messages": [
+    {
+      "role": "system",
+      "template": "Execute a auditoria adversarial Red Team vs. Blue Team no projeto em \"${targetDir}\" para o objetivo: \"${goal}\". Mapeie vulnerabilidades OWASP Top 10, sanitização de inputs, vazamento de credenciais e proteção contra injeções. Apresente um relatório de ataque/defesa adversarial e recomendações de mitigação em Markdown."
+    }
+  ]
+}

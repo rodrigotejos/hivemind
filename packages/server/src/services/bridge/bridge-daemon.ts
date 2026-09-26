@@ -2,6 +2,7 @@ import { spawn } from 'child_process';
 import path from 'path';
 import fs from 'fs';
 import { AgentCircuitBreaker } from './circuit-breaker';
+import { HeartbeatLeaseManager } from '../heartbeat-lease-manager';
 import { TelemetryService } from '../telemetry';
 import * as queries from '../../db/queries';
 import { io } from '../../index';
@@ -254,20 +255,27 @@ export class BridgeDaemonService {
         shell: false,
       });
 
-      const timer = setTimeout(() => {
-        if (!isSettled) {
+      // Gerenciamento de resiliência por Lease de Heartbeat (US-8, Resiliency Baseline)
+      const leaseManager = HeartbeatLeaseManager.getInstance();
+      leaseManager.acquireLease(streamMsgId, child.pid, 60_000);
+
+      const onLeaseExpired = (data: { taskId: string; idleMs: number }) => {
+        if (data.taskId === streamMsgId && !isSettled) {
           isSettled = true;
           clearAllTimers();
-          try { child.kill('SIGKILL'); } catch (e) {}
-          reject(new Error(`Timeout de ${timeoutMs}ms excedido na execução do Antigravity CLI`));
+          reject(new Error(`Lease de batimento cardíaco expirou (${data.idleMs}ms sem atividade) na execução do CLI`));
         }
-      }, timeoutMs);
+      };
+      leaseManager.on('lease_expired', onLeaseExpired);
 
       child.stdout?.on('data', (data) => {
         if (!hasReceivedRealOutput) {
           hasReceivedRealOutput = true;
           clearAllTimers();
         }
+        // Renova lease do subprocesso
+        leaseManager.renewLease(streamMsgId);
+
         const chunkStr = data.toString();
         outputBuffer += chunkStr;
 
@@ -287,6 +295,8 @@ export class BridgeDaemonService {
           hasReceivedRealOutput = true;
           clearAllTimers();
         }
+        leaseManager.renewLease(streamMsgId);
+
         const chunkStr = data.toString();
         outputBuffer += chunkStr;
 
@@ -303,7 +313,8 @@ export class BridgeDaemonService {
       child.on('error', (err) => {
         if (!isSettled) {
           isSettled = true;
-          clearTimeout(timer);
+          leaseManager.releaseLease(streamMsgId);
+          leaseManager.off('lease_expired', onLeaseExpired);
           clearAllTimers();
           if ((err as any).code === 'ENOENT') {
             resolve({
@@ -319,7 +330,8 @@ export class BridgeDaemonService {
       child.on('close', (code) => {
         if (!isSettled) {
           isSettled = true;
-          clearTimeout(timer);
+          leaseManager.releaseLease(streamMsgId);
+          leaseManager.off('lease_expired', onLeaseExpired);
           clearAllTimers();
           const cleanOutput = outputBuffer.trim();
           if (code === 0 || cleanOutput.length > 0) {
