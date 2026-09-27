@@ -13,12 +13,16 @@ import {
   Layers, 
   MessageSquare,
   Cpu,
-  Bot
+  Bot,
+  GitCommit,
+  GitPullRequest,
+  ShieldAlert
 } from 'lucide-react';
 import MessageBubble from '../components/MessageBubble';
 import BlockerAlert from '../components/BlockerAlert';
 import CockpitPanel from '../components/CockpitPanel';
 import RecoveryToast, { type RecoveryToastItem } from '../components/RecoveryToast';
+import GitDiffModal from '../components/GitDiffModal';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const ME_ID = 'rodrigo'; // Fake human ID
@@ -34,6 +38,12 @@ export default function MessagesView() {
   const [input, setInput] = useState('');
   const [replyingTo, setReplyingTo] = useState<any>(null);
   
+  // Git Supervisor & Commit Review States (US-4)
+  const [gitDiffModalOpen, setGitDiffModalOpen] = useState(false);
+  const [activeGitDiffData, setActiveGitDiffData] = useState<{ diff: string; suggestedMessage?: string; taskTitle?: string; taskId?: string } | null>(null);
+  const [commitReviewRequests, setCommitReviewRequests] = useState<any[]>([]);
+  const [gitStatus, setGitStatus] = useState<{ hasChanges: boolean; count: number }>({ hasChanges: false, count: 0 });
+
   interface ActiveStream {
     messageId: string;
     agentId: string;
@@ -198,6 +208,46 @@ export default function MessagesView() {
       }
     });
 
+    // Git Supervisor & Commit Review Events (US-4)
+    newSocket.on('commit_review_requested', (data: any) => {
+      setCommitReviewRequests(prev => {
+        const existingIndex = prev.findIndex(r => r.taskId === data.taskId);
+        if (existingIndex >= 0) {
+          const next = [...prev];
+          next[existingIndex] = data;
+          return next;
+        }
+        return [...prev, data];
+      });
+      setGitStatus({ hasChanges: true, count: data.filesChanged?.length || 0 });
+    });
+
+    newSocket.on('commit_completed', () => {
+      setCommitReviewRequests([]);
+      setGitStatus({ hasChanges: false, count: 0 });
+    });
+
+    newSocket.on('commit_rejected', () => {
+      setCommitReviewRequests([]);
+      setGitStatus({ hasChanges: false, count: 0 });
+    });
+
+    newSocket.on('git_status_changed', (data: any) => {
+      setGitStatus({ hasChanges: !!data.hasChanges, count: data.count || 0 });
+    });
+
+    // Carrega status inicial do Git
+    if (id) {
+      fetch(`${API_URL}/api/projects/${id}/git/diff`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setGitStatus({ hasChanges: !!data.hasChanges, count: data.filesChanged?.length || 0 });
+          }
+        })
+        .catch(() => {});
+    }
+
     return () => {
       newSocket.close();
     };
@@ -361,9 +411,38 @@ export default function MessagesView() {
           </div>
         </div>
         
-        <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
-          <Activity size={14} className="text-emerald-400 animate-pulse" />
-          <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Syncing</span>
+        <div className="flex items-center gap-3">
+          {/* Git Quick-Action Button (US-4) */}
+          {gitStatus.hasChanges ? (
+            <button
+              onClick={() => {
+                setActiveGitDiffData({ diff: '' });
+                setGitDiffModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-500/10 border border-amber-500/30 text-amber-300 hover:bg-amber-500/20 rounded-xl text-xs font-semibold transition-all cursor-pointer shadow-[0_0_12px_rgba(245,158,11,0.2)]"
+              title="Existem modificações não commitadas no repositório"
+            >
+              <GitPullRequest size={14} className="text-amber-400 animate-pulse" />
+              <span>Git Diff ({gitStatus.count})</span>
+            </button>
+          ) : (
+            <button
+              onClick={() => {
+                setActiveGitDiffData({ diff: '' });
+                setGitDiffModalOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 bg-zinc-900 border border-zinc-800 text-zinc-400 hover:text-zinc-200 rounded-xl text-xs font-mono transition-colors cursor-pointer"
+              title="Repositório sincronizado (Working tree clean)"
+            >
+              <GitCommit size={14} className="text-emerald-400" />
+              <span className="text-[11px]">Git: Clean</span>
+            </button>
+          )}
+
+          <div className="flex items-center gap-2 px-3 py-1.5 bg-emerald-500/10 border border-emerald-500/20 rounded-lg">
+            <Activity size={14} className="text-emerald-400 animate-pulse" />
+            <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">Syncing</span>
+          </div>
         </div>
       </header>
 
@@ -516,8 +595,78 @@ export default function MessagesView() {
                   </div>
                 </div>
               )}
+
+              {/* Cards de Revisão e Aprovação de Commit (US-4) */}
+              {commitReviewRequests.map((req, idx) => (
+                <div
+                  key={idx}
+                  className="p-4 rounded-2xl bg-zinc-900/90 border border-cyan-500/40 shadow-xl backdrop-blur-md space-y-3 animate-in fade-in"
+                >
+                  <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-xl bg-cyan-500/10 border border-cyan-500/30 flex items-center justify-center text-cyan-400 shrink-0">
+                        <GitPullRequest size={16} />
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2">
+                          <h4 className="text-xs font-bold text-white">
+                            Modificações Prontas para Revisão (Git Diff)
+                          </h4>
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-500/20 text-cyan-300 font-mono font-semibold">
+                            {req.filesChanged?.length || 0} arquivos
+                          </span>
+                        </div>
+                        <p className="text-[11px] text-zinc-400 mt-0.5">
+                          {req.taskTitle ? `Tarefa: ${req.taskTitle}` : 'Agente concluiu modificações no código.'}
+                        </p>
+                      </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 font-mono text-[11px]">
+                      {req.totalAdditions > 0 && (
+                        <span className="text-emerald-400 font-bold">+{req.totalAdditions}</span>
+                      )}
+                      {req.totalDeletions > 0 && (
+                        <span className="text-rose-400 font-bold">-{req.totalDeletions}</span>
+                      )}
+                    </div>
+                  </div>
+
+                  {req.suggestedMessage && (
+                    <div className="p-2.5 bg-zinc-950/80 border border-zinc-800 rounded-xl text-xs font-mono text-zinc-300 flex items-center gap-2">
+                      <span className="text-zinc-500 text-[10px]">Sugestão:</span>
+                      <span className="text-indigo-300 truncate">{req.suggestedMessage}</span>
+                    </div>
+                  )}
+
+                  {req.isBlocked && (
+                    <div className="p-2 bg-red-950/50 border border-red-500/40 rounded-xl text-[11px] text-red-300 flex items-center gap-2">
+                      <ShieldAlert size={14} className="text-red-400 shrink-0" />
+                      <span>Arquivos sensíveis detectados ({req.sensitiveFilesDetected?.join(', ')}). Commit bloqueado por segurança.</span>
+                    </div>
+                  )}
+
+                  <div className="flex items-center justify-end gap-2 pt-1">
+                    <button
+                      onClick={() => {
+                        setActiveGitDiffData({
+                          diff: req.diff,
+                          suggestedMessage: req.suggestedMessage,
+                          taskTitle: req.taskTitle,
+                          taskId: req.taskId,
+                        });
+                        setGitDiffModalOpen(true);
+                      }}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold transition-all shadow-[0_0_15px_rgba(6,182,212,0.3)] hover:shadow-[0_0_20px_rgba(6,182,212,0.5)] cursor-pointer"
+                    >
+                      <GitCommit size={14} />
+                      Inspecionar Git Diff & Comitar
+                    </button>
+                  </div>
+                </div>
+              ))}
               
-              {messages.length === 0 && Object.keys(activeStreams).length === 0 && !activeAgentStatus && (
+              {messages.length === 0 && Object.keys(activeStreams).length === 0 && !activeAgentStatus && commitReviewRequests.length === 0 && (
                 <div className="flex flex-col items-center justify-center py-16 text-center">
                   <div className="w-14 h-14 rounded-2xl bg-zinc-900 border border-zinc-800 flex items-center justify-center mb-3">
                     <Terminal size={22} className="text-zinc-600" />
@@ -694,6 +843,28 @@ export default function MessagesView() {
             </form>
           </div>
         </div>
+      )}
+
+      {/* Modal de Revisão Interativa de Git Diff e Aprovação de Commits (US-4) */}
+      {gitDiffModalOpen && (
+        <GitDiffModal
+          projectId={id!}
+          apiUrl={API_URL}
+          diff={activeGitDiffData?.diff || ''}
+          suggestedCommitMessage={activeGitDiffData?.suggestedMessage}
+          taskTitle={activeGitDiffData?.taskTitle}
+          onClose={() => setGitDiffModalOpen(false)}
+          onCommitSuccess={() => {
+            setGitDiffModalOpen(false);
+            setCommitReviewRequests(prev => prev.filter(r => r.taskId !== activeGitDiffData?.taskId));
+            setGitStatus({ hasChanges: false, count: 0 });
+          }}
+          onRejectSuccess={() => {
+            setGitDiffModalOpen(false);
+            setCommitReviewRequests(prev => prev.filter(r => r.taskId !== activeGitDiffData?.taskId));
+            setGitStatus({ hasChanges: false, count: 0 });
+          }}
+        />
       )}
     </div>
   );

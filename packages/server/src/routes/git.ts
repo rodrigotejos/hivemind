@@ -1,14 +1,14 @@
 import { Router, Request, Response } from 'express';
-import { exec } from 'child_process';
-import util from 'util';
 import * as queries from '../db/queries';
+import { GitSupervisor } from '../services/git-supervisor';
+import { io } from '../index';
 
-const execPromise = util.promisify(exec);
 export const gitRouter = Router();
 
-// GET /api/projects/:projectId/git/diff - Retorna git diff e arquivos alterados
+// GET /api/projects/:projectId/git/diff - Retorna git diff, contadores e verificação de segurança
 gitRouter.get('/projects/:projectId/git/diff', async (req: Request, res: Response): Promise<void> => {
   const { projectId } = req.params;
+  const { taskTitle } = req.query as { taskTitle?: string };
 
   try {
     const project = queries.getProject(projectId);
@@ -18,47 +18,29 @@ gitRouter.get('/projects/:projectId/git/diff', async (req: Request, res: Respons
     }
 
     const workingDir = (project as any).path || process.cwd();
-
-    // 1. Obtém status dos arquivos alterados
-    let statusOutput = '';
-    try {
-      const { stdout } = await execPromise('git status --porcelain', { cwd: workingDir });
-      statusOutput = stdout.trim();
-    } catch (e) {}
-
-    // 2. Obtém o diff completo das modificações (incluindo novos arquivos)
-    let diffOutput = '';
-    try {
-      await execPromise('git add -N .', { cwd: workingDir }).catch(() => {});
-      const { stdout } = await execPromise('git diff HEAD', { cwd: workingDir });
-      diffOutput = stdout.trim();
-    } catch (e) {
-      try {
-        const { stdout } = await execPromise('git diff', { cwd: workingDir });
-        diffOutput = stdout.trim();
-      } catch (err2) {}
-    }
-
-    const filesChanged = statusOutput
-      ? statusOutput.split('\n').map(line => line.trim().slice(3)).filter(Boolean)
-      : [];
+    const gitSupervisor = GitSupervisor.getInstance();
+    const analysis = await gitSupervisor.getDiff(workingDir, taskTitle);
 
     res.json({
       success: true,
-      hasChanges: filesChanged.length > 0 || diffOutput.length > 0,
-      filesChanged,
-      diff: diffOutput || (statusOutput ? `Arquivos pendentes de commit:\n${statusOutput}` : 'Nenhuma alteração detectada no repositório.'),
-      status: statusOutput,
+      hasChanges: analysis.hasChanges,
+      filesChanged: analysis.filesChanged,
+      diff: analysis.diff,
+      totalAdditions: analysis.totalAdditions,
+      totalDeletions: analysis.totalDeletions,
+      suggestedMessage: analysis.suggestedMessage,
+      sensitiveFilesDetected: analysis.sensitiveFilesDetected,
+      isBlocked: analysis.isBlocked,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });
   }
 });
 
-// POST /api/projects/:projectId/git/commit - Executa git add e git commit automático
+// POST /api/projects/:projectId/git/commit - Executa commit com validações e proteção anti-injection
 gitRouter.post('/projects/:projectId/git/commit', async (req: Request, res: Response): Promise<void> => {
   const { projectId } = req.params;
-  const { message } = req.body;
+  const { message, operator } = req.body;
 
   if (!message || !message.trim()) {
     res.status(400).json({ success: false, error: 'Mensagem de commit é obrigatória.' });
@@ -73,28 +55,103 @@ gitRouter.post('/projects/:projectId/git/commit', async (req: Request, res: Resp
     }
 
     const workingDir = (project as any).path || process.cwd();
-    const cleanMessage = message.trim().replace(/"/g, '\\"');
+    const gitSupervisor = GitSupervisor.getInstance();
+    const result = await gitSupervisor.commitChanges(workingDir, message, operator || 'Human Supervisor');
 
-    // 1. git add .
-    await execPromise('git add .', { cwd: workingDir });
-
-    // 2. git commit -m "..."
-    const { stdout } = await execPromise(`git commit -m "${cleanMessage}"`, { cwd: workingDir });
-
-    // 3. Obtém o hash do commit criado
-    let commitHash = '';
-    try {
-      const { stdout: hashOut } = await execPromise('git rev-parse --short HEAD', { cwd: workingDir });
-      commitHash = hashOut.trim();
-    } catch (e) {}
-
-    res.json({
-      success: true,
-      commitHash: commitHash || 'OK',
-      output: stdout.trim(),
-      message: cleanMessage,
+    // Emite evento para todos os clientes conectados ao Cockpit
+    io.to(`project_${projectId}`).emit('commit_completed', {
+      projectId,
+      commitHash: result.commitHash,
+      message,
+      filesCount: result.filesCount,
+      timestamp: result.timestamp,
     });
+    io.to(`project_${projectId}`).emit('git_status_changed', { hasChanges: false, count: 0 });
+
+    res.json(result);
   } catch (err: any) {
-    res.status(500).json({ success: false, error: err.message || 'Falha ao executar commit no repositório.' });
+    const isSensitive = err.message?.includes('SENSITIVE_FILE_VIOLATION');
+    const statusCode = isSensitive ? 403 : 500;
+    res.status(statusCode).json({
+      success: false,
+      error: err.message || 'Falha ao executar commit no repositório.',
+      code: isSensitive ? 'SENSITIVE_FILE_VIOLATION' : 'COMMIT_FAILED',
+    });
+  }
+});
+
+// POST /api/projects/:projectId/git/reject - Rejeita alterações com backup resiliente
+gitRouter.post('/projects/:projectId/git/reject', async (req: Request, res: Response): Promise<void> => {
+  const { projectId } = req.params;
+  const { reason, operator } = req.body;
+
+  try {
+    const project = queries.getProject(projectId);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Projeto não encontrado.' });
+      return;
+    }
+
+    const workingDir = (project as any).path || process.cwd();
+    const gitSupervisor = GitSupervisor.getInstance();
+    const result = await gitSupervisor.rejectChanges(workingDir, reason, operator || 'Human Supervisor');
+
+    // Emite evento para todos os clientes informando a branch de backup preservada
+    io.to(`project_${projectId}`).emit('commit_rejected', {
+      projectId,
+      backupBranch: result.backupBranch,
+      reason,
+      timestamp: result.timestamp,
+    });
+    io.to(`project_${projectId}`).emit('git_status_changed', { hasChanges: false, count: 0 });
+
+    res.json(result);
+  } catch (err: any) {
+    res.status(500).json({
+      success: false,
+      error: err.message || 'Falha ao rejeitar alterações no repositório.',
+    });
+  }
+});
+
+// POST /api/projects/:projectId/git/review-request - Solicita revisão de diff ao Cockpit
+gitRouter.post('/projects/:projectId/git/review-request', async (req: Request, res: Response): Promise<void> => {
+  const { projectId } = req.params;
+  const { taskTitle, taskId } = req.body;
+
+  try {
+    const project = queries.getProject(projectId);
+    if (!project) {
+      res.status(404).json({ success: false, error: 'Projeto não encontrado.' });
+      return;
+    }
+
+    const workingDir = (project as any).path || process.cwd();
+    const gitSupervisor = GitSupervisor.getInstance();
+    const analysis = await gitSupervisor.getDiff(workingDir, taskTitle);
+
+    if (analysis.hasChanges) {
+      io.to(`project_${projectId}`).emit('commit_review_requested', {
+        projectId,
+        taskId,
+        taskTitle,
+        hasChanges: analysis.hasChanges,
+        filesChanged: analysis.filesChanged,
+        diff: analysis.diff,
+        totalAdditions: analysis.totalAdditions,
+        totalDeletions: analysis.totalDeletions,
+        suggestedMessage: analysis.suggestedMessage,
+        sensitiveFilesDetected: analysis.sensitiveFilesDetected,
+        isBlocked: analysis.isBlocked,
+      });
+      io.to(`project_${projectId}`).emit('git_status_changed', {
+        hasChanges: true,
+        count: analysis.filesChanged.length,
+      });
+    }
+
+    res.json({ success: true, analysis });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
   }
 });

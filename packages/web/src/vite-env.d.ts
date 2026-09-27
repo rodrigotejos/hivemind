@@ -46,4 +46,8 @@ declare module 'lucide-react' {
   export const MessageSquare: Icon;
   export const Clock: Icon;
   export const Folder: Icon;
+  export const RotateCcw: Icon;
+  export const GitCommit: Icon;
+  export const GitPullRequest: Icon;
+  export const GitBranch: Icon;
 }
