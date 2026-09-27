@@ -405,3 +405,33 @@
 **AI Response**: "Build & Test da Unit 2 concluído com 100% de sucesso. Compilação TypeScript de @ai-dlc/server e Vite build de web validados com 0 erros. Bateria total de 19 testes unitários e 8 invariantes de Property-Based Testing com fast-check (700 iterações aleatórias) executadas com 100% de aprovação. Documentação atualizada em aidlc-docs/construction/build-and-test/."
 **Context**: Construction - Unit 2 Build and Test Complete
 ---
+
+## Unit 2: Git Commits - Executed
+**Timestamp**: 2026-09-26T21:48:42Z
+**User Request**: "Criar os commits"
+**Commits Criados**:
+1. \75d0164\: \docs(aidlc): complete Functional Design, Code Generation, and Build & Test for Unit 2 (Cockpit Streaming & Auto-Recovery UI)\
+2. \92dfb9d\: \eat(cockpit,resiliency): implement Unit 2 real-time token streaming, adaptive backoff with jitter, auto-recovery toasts, and LangGraph human gate\
+3. \9890313\: \docs(readme): update README with Unit 2 Cockpit streaming, adaptive backoff, and recovery toast documentation\
+**Context**: Iteration 2 - Unit 2 Finalized and Committed
+---
+
+## Unit 3: Functional Design - Complete
+**Timestamp**: 2026-09-26T22:08:56Z
+**User Input**: "1:a, 2:a, 3:a, 4:a"
+**AI Response**: "Functional Design para Unit 3 (Git Supervisor & Commit Approval - US-4) concluído com sucesso. Especificadas as entidades (domain-entities.md), modelo de lógica de negócio com fluxos de inspeção, aprovação segura e rejeição resiliente via backup branch (business-logic-model.md), regras de negócio com bloqueio estrito de arquivos sensíveis e prevenção de shell injection (business-rules.md), e design de componentes visuais com card no chat, badge no header e modal de diff enriquecido (frontend-components.md)."
+**Context**: Construction - Unit 3 Functional Design Complete
+---
+
+## Unit 3: Code Generation Plan - Created
+**Timestamp**: 2026-09-26T22:09:57Z
+**AI Response**: "Plano de Code Generation para a Unit 3 criado em aidlc-docs/construction/plans/unit-3-git-supervisor-code-generation-plan.md estruturado em 7 etapas, contemplando serviço GitSupervisor seguro com execFile, bloqueio estrito de arquivos sensíveis, rollback com branch de backup temporária, card de revisão no Cockpit, enriquecimento do GitDiffModal, testes unitários e PBT com 4 invariantes."
+**Context**: Construction - Unit 3 Code Generation Planning
+---
+
+## Unit 3: Code Generation & Build/Test - Complete
+**Timestamp**: 2026-09-26T22:29:31Z
+**User Request**: "Aprovado e pode executar"
+**AI Response**: "Implementação de código e bateria de testes da Unit 3 concluídas com 100% de sucesso. Criado o serviço GitSupervisor com execFile seguro, verificação rígida contra arquivos sensíveis (Security Baseline), geração semântica Conventional Commits e rollback resiliente com branch backup/rejected-<timestamp> (Resiliency Baseline). Rotas /git/diff, /git/commit, /git/reject e /git/review-request integradas com Socket.IO. Frontend enriquecido com CommitReviewCard no chat, GitDiffModal com suporte a rejeição/backup e badge de status do Git no cabeçalho. Bateria total de 25 testes unitários e 12 invariantes PBT (1.050 execuções aleatórias) executadas com 100% de aprovação. Builds de @ai-dlc/server e web validados sem erros."
+**Context**: Construction - Unit 3 Code Generation and Build & Test Complete
+---

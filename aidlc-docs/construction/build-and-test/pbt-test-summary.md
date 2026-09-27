@@ -4,6 +4,7 @@
 - **Test Files**:
   - `packages/server/tests/pbt/unit-1-invariants.test.ts`
   - `packages/server/tests/pbt/unit-2-invariants.test.ts`
+  - `packages/server/tests/pbt/unit-3-invariants.test.ts`
 - **Execution Target**: Node.js test runner via `ts-node`
 
 ---
@@ -30,7 +31,18 @@
 
 ---
 
+## Unit 3 Invariant Properties Verified
+
+| Invariant ID | Nome | Execuções | Status | Detalhes |
+| :--- | :--- | :--- | :--- | :--- |
+| **PBT-U3-01** | Sensitive Files Blocking Invariant | 100 | PASSED | Para qualquer nível de aninhamento de diretórios combinado com extensões e arquivos sensíveis (.env, .pem, .key, id_rsa, credentials.json), o commit é 100% bloqueado com identificação exata da violação. |
+| **PBT-U3-02** | Safe Files Non-Blocking Invariant | 100 | PASSED | Arquivos de código e documentação legítimos (.ts, .tsx, .js, .md, .sql) com nomes arbitrários nunca são falsamente bloqueados. |
+| **PBT-U3-03** | Conventional Commits Syntax | 100 | PASSED | Para qualquer título de tarefa gerado, a mensagem semântica sugerida satisfaz rigorosamente a regex de Conventional Commits `^(feat\|fix\|refactor\|docs\|test\|chore)(\([a-z0-9_-]+\))?: [^\r\n]+$`. |
+| **PBT-U3-04** | Resilient Backup Branch Name | 50 | PASSED | Para qualquer timestamp arbitrário, o formato de branch de backup gerado `backup/rejected-<timestamp>` obedece rigorosamente às especificações de refnames do Git (`git check-ref-format`). |
+
+---
+
 ## Summary
-- **Total de Invariantes Testadas**: 8
-- **Total de Amostras Geradas Proceduralmente**: 700 casos de teste gerados com `fast-check`
+- **Total de Invariantes Testadas**: 12
+- **Total de Amostras Geradas Proceduralmente**: 1.050 casos de teste gerados com `fast-check`
 - **Taxa de Sucesso**: 100% (0 falhas, 0 regressões)
