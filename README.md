@@ -6,7 +6,7 @@ O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisõe
 
 ---
 
-## 🏛️ Arquitetura e Inovações (Iteração 2 - Unit 1)
+## 🏛️ Arquitetura e Inovações (Iteração 2: Units 1 & 2)
 
 ### 1. 🛡️ Structured Output com Reflection Loop (US-5, Security Baseline)
 - **Validação Estrita via Zod**: Classificação e triagem de mensagens (`MessagePrioritySchema`) sem uso de expressões regulares frágeis.
@@ -15,7 +15,7 @@ O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisõe
 ### 2. 🪟 Sliding Window & Sumarização Recursiva (US-6, Performance)
 - **Token Budgeting Inteligente**: O método `calculateTokenWindow` analisa o consumo real de tokens. Quando o histórico excede o orçamento de segurança, mensagens antigas são condensadas recursivamente em uma âncora `[RESUMO DO HISTÓRICO ANTERIOR]`, mantendo as mensagens recentes intactas.
 
-### 3. 📄 Prompt Registry Desacoplado com Hot-Reload (US-7)
+### 3. 📑 Prompt Registry Desacoplado com Hot-Reload (US-7)
 - **Zero Strings Hardcoded**: Prompts de agentes residem em `packages/server/prompts/*.json` (`triage.json`, `beta_backend.json`, `gamma_qa.json`, `delta_security.json`, etc.).
 - **Hot-Reload em Tempo Real**: Carregamento dinâmico com checagem de `mtime`, permitindo alterar diretivas sem reiniciar o servidor.
 - **Proteção Anti-Injection**: Sanitização automática de delimitadores de sistema (`<system>`, `<instructions>`).
@@ -24,12 +24,28 @@ O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisõe
 - **Eliminação de Timeouts Rígidos**: Substituição do timeout estático de 300000ms por leases renováveis de 60 segundos com base na emissão de chunks pelo subprocesso.
 - **Encerramento Gracioso em Duas Fases**: `SIGTERM` imediato com janela de carência (grace period de 5s) antes de aplicar `SIGKILL`.
 
-### 5. 🧪 Property-Based Testing com `fast-check` (PBT Baseline)
-- Testes procedurais com centenas de execuções aleatórias garantindo:
+### 5. ⚡ Real-Time Token Streaming & Thinking Feedback (US-1, UX)
+- **Streaming Token a Token**: Função assíncrona `streamChat` transmitindo deltas de texto da API Google Gemini diretamente para os clientes via Socket.IO (`agent_typing`).
+- **Cockpit Visual Feedback**: Cursor monoespaciado pulsante `▋` (`animate-pulse text-indigo-400 font-mono`), badge "Digitando..." e indicador "Thinking..." em tempo real.
+
+### 6. 🔄 Adaptive Backoff com Jitter & Auto-Recovery (US-2, Resiliency Baseline)
+- **Detecção Granular de Erros**: Identificação automática de Rate Limits (429 / Resource Exhausted com base de 10s), falhas transitórias de infraestrutura (503 com base de 2s) e headers explícitos `retry-after`.
+- **Prevenção de Efeito Manada (Jitter ±15%)**: Ruído pseudo-aleatório em cada intervalo de retentativa, teto de 60s e até 5 tentativas com auto-recuperação.
+- **Toasts Flutuantes Não-Intrusivos (`RecoveryToast.tsx`)**: Notificação Dark Glassmorphism flutuante no Cockpit com barra de progresso regressiva em segundos e auto-dismiss com verde esmeralda no sucesso (`recovered`).
+
+### 7. 🛑 Human-in-the-Loop Fallback & Pausa no Grafo (US-3)
+- **Suspensão Graciosa do Grafo LangGraph**: Se todas as 5 retentativas falharem, o nó do agente transiciona para `status: 'waiting_human'`, preserva o checkpoint da tarefa e emite um evento de bloqueio `human_gate` com contexto de erro para intervenção do operador.
+
+### 8. 🧪 Property-Based Testing com `fast-check` (PBT Baseline)
+- Testes procedurais com centenas de execuções aleatórias garantindo 8 invariantes:
   - `PBT-U1-01`: Invariante de orçamento de tokens nunca violada.
   - `PBT-U1-02`: Conformidade estrita com schemas Zod.
   - `PBT-U1-03`: Integridade de sanitização contra injeções.
   - `PBT-U1-04`: Monotonicidade determinística da expiração de leases.
+  - `PBT-U2-01`: Monotonicidade do backoff exponencial e teto máximo de 60s.
+  - `PBT-U2-02`: Limites rígidos do ruído randômico de jitter [0.85 * nominal, 1.15 * nominal].
+  - `PBT-U2-03`: Integridade absoluta de concatenação do stream de deltas.
+  - `PBT-U2-04`: Limite estrito de tentativas antes de declarar falha crítica e pausa.
 
 ---
 
@@ -52,20 +68,28 @@ GOOGLE_API_KEY=sua_chave_aqui
 ```
 
 ### 3. Compilar os Workspaces
-Compila o código TypeScript em todos os pacotes:
+Compila o código TypeScript em todos os pacotes (Backend e Frontend):
 ```bash
-npm run build
+npm run build -w @ai-dlc/server
+npm run build -w web
 ```
 
-### 4. Rodar a Suíte de Testes (Unit & PBT)
-Para rodar os testes unitários e de propriedades da Unit 1:
-```bash
+### 4. Rodar a Suíte Completa de Testes (Unit & PBT)
+Para rodar todos os testes unitários e de propriedades das Units 1 e 2:
+```powershell
 cd packages/server
+$env:NODE_ENV="test"
+
+# Testes Unitários
+npx ts-node -T tests/unit/adaptive-backoff.test.ts
 npx ts-node -T tests/unit/prompt-registry.test.ts
 npx ts-node -T tests/unit/sliding-window.test.ts
 npx ts-node -T tests/unit/structured-output.test.ts
 npx ts-node -T tests/unit/heartbeat-lease-manager.test.ts
+
+# Testes de Propriedades (PBT Baseline)
 npx ts-node -T tests/pbt/unit-1-invariants.test.ts
+npx ts-node -T tests/pbt/unit-2-invariants.test.ts
 ```
 
 ### 5. Rodar o Servidor de Desenvolvimento
@@ -93,8 +117,8 @@ npm run dev
 
 ---
 
-## 📁 Registro do AI-DLC e Documentação
+## 📑 Registro do AI-DLC e Documentação
 Toda a documentação gerada pelo fluxo AI-DLC encontra-se estruturada em `aidlc-docs/`:
 - `aidlc-docs/inception/`: Requirements analysis, user stories, application design e unit of work.
-- `aidlc-docs/construction/`: Functional designs, code generation summaries e relatórios de build & test.
+- `aidlc-docs/construction/`: Functional designs, code generation summaries e relatórios de build & test de cada unidade.
 - `aidlc-docs/audit.md`: Log de auditoria formal de cada decisão e aprovação humana.
