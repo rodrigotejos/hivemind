@@ -4,7 +4,7 @@
 - **Project Name**: Hivemind (AI-DLC Coordinator)
 - **Project Type**: Brownfield
 - **Start Date**: 2026-08-15T20:50:49-03:00
-- **Current Stage**: CONSTRUCTION - Build & Test Complete (All 6 Units Implemented & Verified)
+- **Current Stage**: CONSTRUCTION - Iteration 2 / Unit 2: Build & Test Complete
 
 ## Workspace State
 - **Existing Code**: Yes
@@ -53,19 +53,22 @@
 ### Stage Progress
 - [x] Workspace Detection
 - [x] Requirements Analysis
-
 - [x] User Stories
-
 - [x] Workflow Planning
 - [x] Application Design
 - [x] Units Generation
 
-
-
-### Construction: Unit 1 (Infraestrutura de LLM & Segurança)
+### Construction: Unit 1 (Infraestrutura de LLM & SeguranÃ§a)
 - [x] Functional Design
 - [x] Code Generation
 - [x] Build & Test
 
+### Construction: Unit 2 (Cockpit Streaming & Auto-Recovery UI)
+- [x] Functional Design
+- [x] Code Generation
+- [x] Build & Test
 
-
+### Construction: Unit 3 (Git Supervisor & Commit Approval)
+- [ ] Functional Design
+- [ ] Code Generation
+- [ ] Build & Test

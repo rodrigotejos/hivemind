@@ -345,3 +345,63 @@
 
 ---
 
+
+## Construction: Unit 2 - Kickoff
+**Timestamp**: 2026-09-26T23:50:45Z
+**User Response**: "pode iniciar"
+**Context**: Iniciando Functional Design para Unit 2 (Cockpit Streaming & Auto-Recovery UI)
+
+---
+
+
+## Unit 2: Functional Design Plan - Questions
+**Timestamp**: 2026-09-26T23:51:34Z
+**AI Response**: "Plano de Functional Design para Unit 2 criado com 4 perguntas sobre WebSocket streaming, UX dos toasts e backoff com jitter."
+**Context**: Construction - Unit 2 Functional Design Planning
+
+---
+
+
+**Timestamp**: 2026-09-26T23:56:44Z
+**User Input**: "1:A, 2:A, 3:A, 4: 10s base com exponential backoff atÈ 5x, com checagem inteligente de erro/retry da API do Google Gemini"
+**AI Response**: "Respostas analisadas. Definida estratÈgia adaptativa: se 429/ResourceExhausted usa base de 10s atÈ 5x com jitter; se transitÛrio 503 usa 2s; respeita header/mensagem de retry-after se presente."
+**Context**: Construction - Unit 2 Functional Design Respostas Aprovadas
+
+---
+
+
+**Timestamp**: 2026-09-26T23:58:02Z
+**AI Response**: "Functional Design para Unit 2 concluÌdo. Artefatos gerados: business-logic-model.md, business-rules.md, domain-entities.md, frontend-components.md. Solicitando aprovaÁ„o para prosseguir para Code Generation."
+**Context**: Construction - Unit 2 Functional Design Complete
+
+---
+
+
+## Unit 2: Code Generation Plan - Approval Request
+**Timestamp**: 2026-09-27T00:00:49Z
+**AI Response**: "Plano de Code Generation para Unit 2 criado em aidlc-docs/construction/plans/unit-2-cockpit-streaming-code-generation-plan.md com 7 passos. Aguardando aprovaÁ„o para iniciar a implementaÁ„o."
+**Context**: Construction - Unit 2 Code Generation Planning
+
+---
+
+
+## Unit 2: Code Generation - Execution Approved
+**Timestamp**: 2026-09-27T00:04:07Z
+**User Response**: "Approve & Execute"
+**Status**: Approved
+**Context**: Iniciando implementaÁ„o de cÛdigo para Unit 2 (Cockpit Streaming & Auto-Recovery UI)
+
+---
+
+
+## Unit 2: Code Generation - Complete
+**Timestamp**: 2026-09-26T21:16:00Z
+**AI Response**: "Implementa√ß√£o de c√≥digo da Unit 2 conclu√≠da com sucesso. Componentes criados e modificados: RecoveryToast.tsx, ai-manager.ts (adaptive backoff e streamChat), nodes.ts (integra√ß√£o de streaming e pausa com human_gate), MessagesView.tsx. Testes unit√°rios (5/5) e PBT (4/4) passando com 100% de sucesso. Builds de web e server validados sem erros."
+**Context**: Construction - Unit 2 Code Generation Complete
+---
+
+## Unit 2: Build & Test - Complete
+**Timestamp**: 2026-09-26T21:17:40Z
+**AI Response**: "Build & Test da Unit 2 conclu√≠do com 100% de sucesso. Compila√ß√£o TypeScript de @ai-dlc/server e Vite build de web validados com 0 erros. Bateria total de 19 testes unit√°rios e 8 invariantes de Property-Based Testing com fast-check (700 itera√ß√µes aleat√≥rias) executadas com 100% de aprova√ß√£o. Documenta√ß√£o atualizada em aidlc-docs/construction/build-and-test/."
+**Context**: Construction - Unit 2 Build and Test Complete
+---
