@@ -3,6 +3,7 @@ import { PromptTemplate } from 'langchain/prompts';
 import { z } from 'zod';
 import * as queries from '../db/queries';
 import { PromptRegistry } from './prompt-registry';
+import { io } from '../index';
 
 const modelCache = new Map<string, ChatGoogleGenerativeAI>();
 
@@ -204,6 +205,148 @@ export async function calculateTokenWindow(
     isSummarized: true,
     summaryHeader: condensedSummary
   };
+}
+
+/**
+ * Classifica erros retornados pela API LLM para estratégia de retry adaptativo (US-2).
+ */
+export function classifyLLMError(error: any): { type: 'RATE_LIMIT_429' | 'TRANSIENT_503' | 'FATAL'; baseDelayMs: number; retryAfterMs?: number } {
+  const str = String(error?.message || error || '').toLowerCase();
+  
+  // 1. Checa se o erro traz instrução explícita de Retry-After (ex: "retry after 12s")
+  const match = str.match(/retry(?:-|\s+)after[:\s]+(\d+)(s|ms)?/i);
+  if (match) {
+    const val = parseInt(match[1], 10);
+    const unit = match[2]?.toLowerCase();
+    const retryAfterMs = unit === 'ms' ? val : val * 1000;
+    return { type: 'RATE_LIMIT_429', baseDelayMs: Math.min(60000, retryAfterMs), retryAfterMs };
+  }
+
+  // 2. Erros de taxa 429 ou esgotamento de quota por minuto (RPM / TPM)
+  if (str.includes('429') || str.includes('resource_exhausted') || str.includes('quota') || str.includes('rate limit')) {
+    return { type: 'RATE_LIMIT_429', baseDelayMs: 10000 }; // 10s base
+  }
+
+  // 3. Erros transitórios de rede ou sobrecarga do servidor
+  if (str.includes('503') || str.includes('500') || str.includes('overloaded') || str.includes('unavailable') || str.includes('timeout') || str.includes('econnreset')) {
+    return { type: 'TRANSIENT_503', baseDelayMs: 2000 }; // 2s base
+  }
+
+  return { type: 'FATAL', baseDelayMs: 0 };
+}
+
+/**
+ * Calcula delay com Exponential Backoff e Jitter (±15%) limitados ao teto de 60s.
+ */
+export function calculateAdaptiveDelay(baseDelayMs: number, attempt: number, jitterPct: number = 0.15): number {
+  const nominal = Math.min(60000, baseDelayMs * Math.pow(2, attempt - 1));
+  const jitterFactor = 1 + (Math.random() * 2 - 1) * jitterPct;
+  return Math.round(nominal * jitterFactor);
+}
+
+/**
+ * Executa uma chamada à LLM com retentativas adaptativas e emissão de eventos agent_recovery (US-2, US-3).
+ */
+export async function executeWithAdaptiveBackoff<T>(
+  operation: () => Promise<T>,
+  context: { projectId: string; sessionId?: string; agentId: string; agentRole: string },
+  maxAttempts: number = 5
+): Promise<T> {
+  let attempt = 1;
+  let lastError: any = null;
+
+  while (attempt <= maxAttempts) {
+    try {
+      const result = await operation();
+      if (attempt > 1) {
+        // Notifica recuperação bem sucedida
+        io.to(`project_${context.projectId}`).emit('agent_recovery', {
+          projectId: context.projectId,
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          agentRole: context.agentRole,
+          status: 'recovered',
+          attempt,
+          maxAttempts,
+          delayMs: 0,
+          errorMessage: '',
+          timestamp: Date.now(),
+        });
+      }
+      return result;
+    } catch (err: any) {
+      lastError = err;
+      const classification = classifyLLMError(err);
+      
+      if (classification.type === 'FATAL' || attempt >= maxAttempts) {
+        console.error(`[AutoRecovery] Falha definitiva na tentativa ${attempt}/${maxAttempts} para ${context.agentId}:`, err);
+        io.to(`project_${context.projectId}`).emit('agent_recovery', {
+          projectId: context.projectId,
+          sessionId: context.sessionId,
+          agentId: context.agentId,
+          agentRole: context.agentRole,
+          status: 'exhausted',
+          attempt,
+          maxAttempts,
+          delayMs: 0,
+          errorMessage: err?.message || 'Falha crítica na conexão com a LLM',
+          timestamp: Date.now(),
+        });
+        throw err;
+      }
+
+      const delayMs = classification.retryAfterMs || calculateAdaptiveDelay(classification.baseDelayMs, attempt);
+      console.warn(`[AutoRecovery] Tentativa ${attempt}/${maxAttempts} para ${context.agentId} falhou (${classification.type}). Retentando em ${delayMs}ms...`);
+
+      io.to(`project_${context.projectId}`).emit('agent_recovery', {
+        projectId: context.projectId,
+        sessionId: context.sessionId,
+        agentId: context.agentId,
+        agentRole: context.agentRole,
+        status: 'retrying',
+        attempt,
+        maxAttempts,
+        delayMs,
+        errorMessage: err?.message || 'Falha transitória na API da LLM',
+        timestamp: Date.now(),
+      });
+
+      await new Promise(r => setTimeout(r, delayMs));
+      attempt++;
+    }
+  }
+
+  throw lastError;
+}
+
+/**
+ * Executa geração em streaming chamando model.stream e notificando onChunk em tempo real (US-1).
+ */
+export async function streamChat(
+  prompt: string,
+  modelInstance?: ChatGoogleGenerativeAI | null,
+  onChunk?: (delta: string, fullText: string) => void
+): Promise<string> {
+  const model = modelInstance || getAutoRouterModel() || getModel('gemini-3.5-flash');
+  if (!model) {
+    throw new Error('Provedor LLM não disponível para streaming.');
+  }
+
+  let fullText = '';
+  try {
+    const stream = await model.stream(prompt);
+    for await (const chunk of stream) {
+      const delta = (chunk?.content as string) || '';
+      fullText += delta;
+      if (onChunk && delta) {
+        onChunk(delta, fullText);
+      }
+    }
+    return fullText;
+  } catch (err) {
+    console.error('[streamChat] Erro no fluxo de streaming:', err);
+    throw err;
+  }
 }
 
 /**

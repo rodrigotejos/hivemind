@@ -18,6 +18,7 @@ import {
 import MessageBubble from '../components/MessageBubble';
 import BlockerAlert from '../components/BlockerAlert';
 import CockpitPanel from '../components/CockpitPanel';
+import RecoveryToast, { type RecoveryToastItem } from '../components/RecoveryToast';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3001';
 const ME_ID = 'rodrigo'; // Fake human ID
@@ -44,6 +45,7 @@ export default function MessagesView() {
 
   const [activeStreams, setActiveStreams] = useState<Record<string, ActiveStream>>({});
   const [activeAgentStatus, setActiveAgentStatus] = useState<any>(null);
+  const [recoveryToasts, setRecoveryToasts] = useState<RecoveryToastItem[]>([]);
   
   // Modal de Criação de Tarefa
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -139,6 +141,50 @@ export default function MessagesView() {
         delete next[data.messageId];
         return next;
       });
+    });
+
+    newSocket.on('agent_typing', (data) => {
+      setActiveStreams(prev => ({
+        ...prev,
+        [data.messageId]: {
+          messageId: data.messageId,
+          agentId: data.agentId,
+          agentRole: data.agentRole,
+          threadId: data.threadId,
+          fullText: data.fullText,
+          status: 'streaming',
+        }
+      }));
+    });
+
+    newSocket.on('agent_recovery', (data: any) => {
+      setRecoveryToasts(prev => {
+        const existingIndex = prev.findIndex(t => t.agentId === data.agentId);
+        const toastItem: RecoveryToastItem = {
+          id: `recovery_${data.agentId}_${data.attempt}`,
+          agentId: data.agentId,
+          agentRole: data.agentRole,
+          status: data.status,
+          attempt: data.attempt,
+          maxAttempts: data.maxAttempts || 5,
+          delayMs: data.delayMs || 0,
+          errorMessage: data.errorMessage,
+          timestamp: Date.now(),
+        };
+
+        if (existingIndex >= 0) {
+          const updated = [...prev];
+          updated[existingIndex] = toastItem;
+          return updated;
+        }
+        return [...prev, toastItem];
+      });
+
+      if (data.status === 'recovered') {
+        setTimeout(() => {
+          setRecoveryToasts(prev => prev.filter(t => t.agentId !== data.agentId));
+        }, 3000);
+      }
     });
 
     newSocket.on('agent_step_started', (data) => {
@@ -275,6 +321,12 @@ export default function MessagesView() {
 
   return (
     <div className="flex flex-col h-screen bg-zinc-950 text-zinc-300 relative overflow-hidden">
+      {/* Auto-Recovery Floating Toasts Stack (US-2, US-3) */}
+      <RecoveryToast
+        toasts={recoveryToasts}
+        onDismiss={(toastId) => setRecoveryToasts(prev => prev.filter(t => t.id !== toastId))}
+      />
+
       {/* Background gradients */}
       <div className="absolute top-0 left-0 w-full h-96 bg-gradient-to-b from-indigo-900/20 to-transparent pointer-events-none"></div>
       
@@ -439,15 +491,15 @@ export default function MessagesView() {
                         <span className="text-[10px] px-2 py-0.5 rounded-full font-mono bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">
                           {stream.agentRole || 'agente'}
                         </span>
-                        <span className="text-[10px] text-amber-400 flex items-center gap-1.5 font-mono">
-                          <span className="inline-block w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
-                          Escrevendo em tempo real...
+                        <span className={`text-[10px] flex items-center gap-1.5 font-mono ${stream.fullText ? 'text-amber-400' : 'text-indigo-400'}`}>
+                          <span className={`inline-block w-1.5 h-1.5 rounded-full ${stream.fullText ? 'bg-amber-400' : 'bg-indigo-400'} animate-ping`}></span>
+                          {stream.fullText ? 'Digitando...' : 'Thinking...'}
                         </span>
                       </div>
 
                       <div className="p-4 rounded-2xl bg-zinc-900/90 border border-indigo-500/30 text-zinc-200 text-xs shadow-xl backdrop-blur-md relative overflow-hidden font-mono whitespace-pre-wrap leading-relaxed max-h-96 overflow-y-auto custom-scrollbar">
-                        {stream.fullText || 'Iniciando análise no repositório...'}
-                        <span className="inline-block w-2 h-3.5 bg-indigo-400 ml-1 animate-pulse align-middle"></span>
+                        {stream.fullText || 'Pensando na resposta...'}
+                        <span className="inline-block text-indigo-400 font-mono ml-0.5 animate-pulse">▋</span>
                       </div>
                     </div>
                   </div>

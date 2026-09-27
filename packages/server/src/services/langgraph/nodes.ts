@@ -1,6 +1,6 @@
 import { AgentGraphStateType, GraphMessage } from './state';
 import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
-import { getModel, resolveModelConfig, updateSharedContext, expandContextWithRealData } from '../ai-manager';
+import { getModel, resolveModelConfig, updateSharedContext, expandContextWithRealData, streamChat, executeWithAdaptiveBackoff } from '../ai-manager';
 import { BridgeDaemonService } from '../bridge/bridge-daemon';
 import { TelemetryService } from '../telemetry';
 import { PromptRegistry } from '../prompt-registry';
@@ -164,13 +164,64 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
       console.warn(`BridgeDaemon ${agentName} fallback:`, bridgeErr);
     }
 
-    // 2. Se o Bridge CLI não retornou output satisfatório, invoca o modelo Google Gemini configurado
+    // 2. Se o Bridge CLI não retornou output satisfatório, invoca o modelo Google Gemini com Streaming e Auto-Recovery (US-1, US-2, US-3)
     if (!agentResponseText) {
       const model = getModel(state.model, state.goal, state.reasoningLevel);
       if (model) {
+        const streamMsgId = `stream_ai_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+        
+        // Emite início do streaming (Thinking -> Typing)
+        io.to(`project_${state.projectId}`).emit('agent_stream_start', {
+          messageId: streamMsgId,
+          projectId: state.projectId,
+          threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
+          agentId: agentName,
+          agentRole: role,
+          status: 'streaming',
+          initialText: '',
+        });
+
         try {
-          const result = await model.invoke(roleSpecificDirective);
-          agentResponseText = (result as any).content as string;
+          agentResponseText = await executeWithAdaptiveBackoff(
+            async () => {
+              return await streamChat(roleSpecificDirective, model, (delta, fullText) => {
+                // Emite deltas e texto cumulativo para o Cockpit em tempo real
+                io.to(`project_${state.projectId}`).emit('agent_stream_chunk', {
+                  messageId: streamMsgId,
+                  projectId: state.projectId,
+                  threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
+                  agentId: agentName,
+                  chunk: delta,
+                  fullText,
+                });
+                io.to(`project_${state.projectId}`).emit('agent_typing', {
+                  messageId: streamMsgId,
+                  projectId: state.projectId,
+                  threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
+                  agentId: agentName,
+                  agentRole: role,
+                  delta,
+                  fullText,
+                  status: 'typing',
+                  timestamp: Date.now(),
+                });
+              });
+            },
+            {
+              projectId: state.projectId,
+              sessionId: state.sessionId,
+              agentId: agentName,
+              agentRole: role,
+            },
+            5
+          );
+
+          // Notifica encerramento do stream
+          io.to(`project_${state.projectId}`).emit('agent_stream_end', {
+            messageId: streamMsgId,
+            projectId: state.projectId,
+            agentId: agentName,
+          });
 
           // Salva no banco de dados e emite via Socket.IO
           const dbMessage = queries.createMessage({
@@ -186,8 +237,24 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
           if (dbMessage) {
             io.to(`project_${state.projectId}`).emit('new_message', { message: dbMessage });
           }
-        } catch (llmErr) {
-          console.warn(`Gemini Model ${agentName} fallback:`, llmErr);
+        } catch (llmErr: any) {
+          console.error(`[WorkerNode] Todas as 5 retentativas falharam para ${agentName}:`, llmErr);
+          
+          // Esgotou tentativas (US-3): Pausa o grafo com Human Gate
+          const interruptPayload: InterruptPayload = {
+            projectId: state.projectId,
+            checkpointId: `chk_recovery_${Date.now()}`,
+            question: `Agente ${agentName} falhou após 5 retentativas de auto-recovery: ${llmErr?.message || 'Erro de conexão/quota com a LLM'}.`,
+            options: ['Tentar Novamente', 'Alterar Modelo de IA', 'Ignorar Etapa'],
+            proposedBy: agentName,
+            category: 'blocker',
+          };
+
+          return {
+            nextStep: 'human_gate',
+            status: 'waiting_human',
+            pendingDecision: interruptPayload,
+          };
         }
       }
     }
