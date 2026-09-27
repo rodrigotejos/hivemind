@@ -6,7 +6,7 @@ O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisõe
 
 ---
 
-## 🏛️ Arquitetura e Inovações (Iteração 2: Units 1 & 2)
+## 🏛️ Arquitetura e Inovações (Iteração 2: Units 1, 2 & 3)
 
 ### 1. 🛡️ Structured Output com Reflection Loop (US-5, Security Baseline)
 - **Validação Estrita via Zod**: Classificação e triagem de mensagens (`MessagePrioritySchema`) sem uso de expressões regulares frágeis.
@@ -36,8 +36,18 @@ O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisõe
 ### 7. 🛑 Human-in-the-Loop Fallback & Pausa no Grafo (US-3)
 - **Suspensão Graciosa do Grafo LangGraph**: Se todas as 5 retentativas falharem, o nó do agente transiciona para `status: 'waiting_human'`, preserva o checkpoint da tarefa e emite um evento de bloqueio `human_gate` com contexto de erro para intervenção do operador.
 
-### 8. 🧪 Property-Based Testing com `fast-check` (PBT Baseline)
-- Testes procedurais com centenas de execuções aleatórias garantindo 8 invariantes:
+### 8. 🔀 Git Supervisor & ExecFile Safety (US-4, Security Baseline)
+- **Execução Atômica Segura**: Invocação do Git CLI via `execFile` com arrays de argumentos atômicos, eliminando riscos de shell command injection.
+- **Bloqueio Rígido de Arquivos Sensíveis**: Detecção preventiva de arquivos como `.env*`, `*.pem`, `*.key`, `id_rsa*` e `credentials.json`, bloqueando o commit com `SENSITIVE_FILE_VIOLATION`.
+
+### 9. 🛡️ Rejeição Resiliente com Backup Automático (US-4, Resiliency Baseline)
+- **Zero Data Loss**: Ao rejeitar modificações no Cockpit, o sistema cria automaticamente uma branch de backup temporária (`backup/rejected-<timestamp>`) contendo as alterações antes de reverter a working tree com `git reset --hard HEAD` e `git clean -fd`.
+
+### 10. 📝 Sugestão Semântica Conventional Commits (US-4)
+- **Inferência Inteligente**: Sugestão automática de mensagens no padrão semântico (`feat(...)`, `fix(...)`, `docs(...)`, etc.) baseada no contexto da tarefa e nos arquivos modificados, totalmente editável pelo operador humano.
+
+### 11. 🧪 Property-Based Testing com `fast-check` (PBT Baseline)
+- Testes procedurais com centenas de execuções aleatórias garantindo 12 invariantes:
   - `PBT-U1-01`: Invariante de orçamento de tokens nunca violada.
   - `PBT-U1-02`: Conformidade estrita com schemas Zod.
   - `PBT-U1-03`: Integridade de sanitização contra injeções.
@@ -46,6 +56,10 @@ O sistema expõe uma API REST/WebSockets para os agentes trocarem logs, decisõe
   - `PBT-U2-02`: Limites rígidos do ruído randômico de jitter [0.85 * nominal, 1.15 * nominal].
   - `PBT-U2-03`: Integridade absoluta de concatenação do stream de deltas.
   - `PBT-U2-04`: Limite estrito de tentativas antes de declarar falha crítica e pausa.
+  - `PBT-U3-01`: Detecção 100% de arquivos sensíveis sob variações de caminho.
+  - `PBT-U3-02`: Não-bloqueio de arquivos de código seguros legítimos.
+  - `PBT-U3-03`: Conformidade sintática da mensagem no padrão Conventional Commits.
+  - `PBT-U3-04`: Unicidade e conformidade de refnames de branch de backup do Git.
 
 ---
 
@@ -75,21 +89,23 @@ npm run build -w web
 ```
 
 ### 4. Rodar a Suíte Completa de Testes (Unit & PBT)
-Para rodar todos os testes unitários e de propriedades das Units 1 e 2:
+Para rodar todos os testes unitários e de propriedades das Units 1, 2 e 3:
 ```powershell
 cd packages/server
 $env:NODE_ENV="test"
 
-# Testes Unitários
+# Testes Unitários (25 testes)
+npx ts-node -T tests/unit/git-supervisor.test.ts
 npx ts-node -T tests/unit/adaptive-backoff.test.ts
 npx ts-node -T tests/unit/prompt-registry.test.ts
 npx ts-node -T tests/unit/sliding-window.test.ts
 npx ts-node -T tests/unit/structured-output.test.ts
 npx ts-node -T tests/unit/heartbeat-lease-manager.test.ts
 
-# Testes de Propriedades (PBT Baseline)
+# Testes de Propriedades PBT (12 invariantes / 1.050 iterações aleatórias)
 npx ts-node -T tests/pbt/unit-1-invariants.test.ts
 npx ts-node -T tests/pbt/unit-2-invariants.test.ts
+npx ts-node -T tests/pbt/unit-3-invariants.test.ts
 ```
 
 ### 5. Rodar o Servidor de Desenvolvimento
