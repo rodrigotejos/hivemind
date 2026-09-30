@@ -99,16 +99,30 @@ export class BridgeDaemonService {
       const durationMs = Date.now() - startTime;
       cb.recordSuccess();
 
-      // Salva mensagem no banco de dados vinculada à sessão de tarefa (threadId)
-      const createdMessage = queries.createMessage({
-        projectId: request.projectId,
-        fromAgentId: request.agentId,
-        threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
-        type: 'statement',
-        priority: 'normal',
-        content: result.output,
-        waitingResponse: false,
-      });
+      // Salva mensagem no banco de dados vinculada à sessão de tarefa (threadId) apenas se for uma resposta válida de trabalho
+      const cleanOut = (result.output || '').trim();
+      const isGreetingOrError = 
+        cleanOut.startsWith('Olá! Sou o Antigravity') ||
+        cleanOut.startsWith('Pronto para receber') ||
+        cleanOut.startsWith('Olá! Como posso') ||
+        cleanOut.toLowerCase().startsWith('error:');
+
+      let createdMessage: any = null;
+      if (cleanOut && !isGreetingOrError) {
+        createdMessage = queries.createMessage({
+          projectId: request.projectId,
+          fromAgentId: request.agentId,
+          threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
+          type: 'statement',
+          priority: 'normal',
+          content: result.output,
+          waitingResponse: false,
+        });
+
+        if (createdMessage) {
+          io.to(`project_${request.projectId}`).emit('new_message', { message: createdMessage });
+        }
+      }
 
       // Grava telemetria de consumo de tokens e métricas LangSmith
       const promptTokens = result.tokensUsed?.prompt || Math.ceil(request.prompt.length / 4);
@@ -122,17 +136,13 @@ export class BridgeDaemonService {
         exitCode: 0,
       });
 
-      // 2. Notifica encerramento do streaming com a mensagem persistida
+      // 2. Notifica encerramento do streaming com a mensagem persistida (se houver)
       io.to(`project_${request.projectId}`).emit('agent_stream_end', {
         messageId: streamMsgId,
         projectId: request.projectId,
         threadId: (!request.threadId || request.threadId === 'general') ? undefined : request.threadId,
         finalMessage: createdMessage,
       });
-
-      if (createdMessage) {
-        io.to(`project_${request.projectId}`).emit('new_message', { message: createdMessage });
-      }
 
       resolve({
         success: true,

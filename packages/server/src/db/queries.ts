@@ -63,7 +63,7 @@ export function getProjectMessages(projectId: string, threadId?: string) {
   return db.prepare('SELECT * FROM messages WHERE project_id = ? ORDER BY created_at ASC').all(projectId);
 }
 
-export function updateMessage(id: string, updates: Partial<{status: string, waiting_response: boolean}>) {
+export function updateMessage(id: string, updates: Partial<{status: string, waiting_response: boolean, priority: string}>) {
   const setClauses = Object.keys(updates).map(k => `${k} = ?`).join(', ');
   const values = Object.values(updates).map(v => typeof v === 'boolean' ? (v ? 1 : 0) : v);
   db.prepare(`UPDATE messages SET ${setClauses} WHERE id = ?`).run(...values, id);

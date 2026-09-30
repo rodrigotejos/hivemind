@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { AgentGraphStateType, GraphMessage } from './state';
 import { AgentRole, InterruptPayload } from '@ai-dlc/sdk';
 import { getModel, resolveModelConfig, updateSharedContext, expandContextWithRealData, streamChat, executeWithAdaptiveBackoff } from '../ai-manager';
@@ -65,6 +67,24 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
   const rolesActed = messages.map(m => m.agentId).filter(Boolean);
   const goalLower = (state.goal || '').toLowerCase();
 
+  // Verifica se o objetivo é um fluxo multi-agente completo explícito
+  const isMultiAgentPipeline = 
+    goalLower.includes('pipeline') ||
+    goalLower.includes('ciclo completo') ||
+    goalLower.includes('todas as etapas') ||
+    goalLower.includes('adversarial') ||
+    (goalLower.includes('segurança') && (!rolesActed.includes('delta-security') || !rolesActed.includes('beta-backend')));
+
+  if (rolesActed.length >= 1 && !isMultiAgentPipeline) {
+    // Para consultas e tarefas de chat ou análises unitárias,
+    // a resposta do primeiro especialista conclui o turno com sucesso.
+    return {
+      nextStep: 'convergence',
+      isConverged: true,
+      status: 'completed',
+    };
+  }
+
   let nextRole: 'alpha_frontend' | 'beta_backend' | 'gamma_qa' | 'delta_security' | 'epsilon_infra' | 'convergence' = 'beta_backend';
 
   if (rolesActed.length === 0) {
@@ -80,7 +100,7 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
     }
   } else if (!rolesActed.includes('beta-backend') && (goalLower.includes('api') || goalLower.includes('backend') || goalLower.includes('banco') || goalLower.includes('rota') || goalLower.includes('analise') || goalLower.includes('engenharia reversa') || goalLower.includes('blue team'))) {
     nextRole = 'beta_backend';
-  } else if ((goalLower.includes('segurança') || goalLower.includes('security') || goalLower.includes('owasp')) && rolesActed.includes('delta-security') && rolesActed.includes('beta-backend')) {
+  } else if ((goalLower.includes('segurança') || goalLower.includes('security') || goalLower.includes('owasp') || goalLower.includes('adversarial')) && rolesActed.includes('delta-security') && rolesActed.includes('beta-backend')) {
     // Fluxo específico de segurança: Red Team e Blue Team atuaram -> Convergência imediata
     return {
       nextStep: 'convergence',
@@ -133,6 +153,29 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
       roleSpecificDirective = rendered.fullText;
     } catch {
       roleSpecificDirective = `Analise a arquitetura e código para o objetivo: "${state.goal}" no diretório "${targetDir}". Apresente um relatório técnico em Markdown.`;
+    }
+
+    // Ancoragem e contexto real do repositório local
+    let workspaceContext = '';
+    try {
+      if (fs.existsSync(targetDir)) {
+        const entries = fs.readdirSync(targetDir);
+        const topFiles = entries.slice(0, 30).join(', ');
+        workspaceContext = `[Estrutura do Repositório Local (${targetDir})]: ${topFiles}`;
+        
+        const pkgPath = path.join(targetDir, 'package.json');
+        if (fs.existsSync(pkgPath)) {
+          const pkgRaw = fs.readFileSync(pkgPath, 'utf-8');
+          try {
+            const pkg = JSON.parse(pkgRaw);
+            workspaceContext += `\n[Dependências]: ${JSON.stringify(pkg.dependencies || {})}`;
+          } catch {}
+        }
+      }
+    } catch {}
+
+    if (workspaceContext) {
+      roleSpecificDirective += `\n\nContexto Real do Repositório Local:\n${workspaceContext}`;
     }
 
     let agentResponseText = '';
@@ -349,7 +392,7 @@ export async function convergenceNode(state: AgentGraphStateType): Promise<Parti
   
   const dbMessage = queries.createMessage({
     projectId: state.projectId,
-    fromAgentId: 'rodrigo',
+    fromAgentId: 'supervisor',
     threadId: (!state.sessionId || state.sessionId === 'general') ? undefined : state.sessionId,
     type: 'statement',
     priority: 'normal',

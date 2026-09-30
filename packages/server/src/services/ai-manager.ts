@@ -20,9 +20,12 @@ export interface ModelResolution {
  * Zod Schema para triagem e análise estruturada de mensagens (US-5, Security Baseline).
  */
 export const MessagePrioritySchema = z.object({
-  priority: z.enum(['low', 'normal', 'high', 'critical']),
-  needsHuman: z.boolean(),
-  conflictRisk: z.boolean(),
+  priority: z.preprocess(
+    (val) => (val === 'medium' ? 'normal' : val),
+    z.enum(['low', 'normal', 'high', 'critical'])
+  ) as z.ZodType<'low' | 'normal' | 'high' | 'critical'>,
+  needsHuman: z.boolean().default(false),
+  conflictRisk: z.boolean().default(false),
   reasoning: z.string().optional(),
   category: z.enum(['question', 'decision', 'blocker', 'info', 'security']).optional(),
   tags: z.array(z.string()).default([])
@@ -473,8 +476,8 @@ export async function analyzeMessagePriority(
 
     return {
       priority: structured.priority,
-      needsHuman: structured.needsHuman,
-      conflictRisk: structured.conflictRisk,
+      needsHuman: !!structured.needsHuman,
+      conflictRisk: !!structured.conflictRisk,
       resolvedModel: 'gemini-3.5-flash-lite'
     };
   } catch (e) {

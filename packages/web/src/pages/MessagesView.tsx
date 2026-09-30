@@ -90,7 +90,20 @@ export default function MessagesView() {
     newSocket.emit('join_project', { projectId: id });
 
     newSocket.on('new_message', ({ message }) => {
-      setMessages(prev => [...prev, message]);
+      setMessages(prev => {
+        if (prev.some(m => m.id === message.id)) return prev;
+        const tempIdx = prev.findIndex(m => 
+          typeof m.id === 'string' && m.id.startsWith('temp_') && 
+          m.content === message.content && 
+          m.from_agent_id === message.from_agent_id
+        );
+        if (tempIdx >= 0) {
+          const next = [...prev];
+          next[tempIdx] = message;
+          return next;
+        }
+        return [...prev, message];
+      });
     });
 
     newSocket.on('message_updated', ({ messageId, status }) => {
@@ -354,16 +367,41 @@ export default function MessagesView() {
     setInput('');
     setReplyingTo(null);
 
-    await fetch(`${API_URL}/api/projects/${id}/messages`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'X-Agent-Key': ME_ID },
-      body: JSON.stringify({
-        type: 'answer',
-        content,
-        toAgentId,
-        threadId,
-      })
-    });
+    // Feedback instantâneo otimista na interface (0ms de latência)
+    const tempId = `temp_${Date.now()}`;
+    const optimisticMessage = {
+      id: tempId,
+      project_id: id || '',
+      from_agent_id: ME_ID,
+      to_agent_id: toAgentId,
+      thread_id: threadId,
+      type: 'answer',
+      priority: 'normal',
+      content,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    setMessages(prev => [...prev, optimisticMessage]);
+
+    try {
+      const res = await fetch(`${API_URL}/api/projects/${id}/messages`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'X-Agent-Key': ME_ID },
+        body: JSON.stringify({
+          type: 'answer',
+          content,
+          toAgentId,
+          threadId,
+        })
+      });
+      const data = await res.json();
+      if (data && data.id) {
+        setMessages(prev => prev.map(m => m.id === tempId ? data : m));
+      }
+    } catch (err) {
+      console.error('Falha ao enviar mensagem:', err);
+    }
   };
 
   const agentMap = agents.reduce((acc, curr) => ({ ...acc, [curr.id]: curr.name }), {} as Record<string, string>);
