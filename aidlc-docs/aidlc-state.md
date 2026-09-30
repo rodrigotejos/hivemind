@@ -72,3 +72,34 @@
 - [x] Functional Design
 - [x] Code Generation
 - [x] Build & Test
+
+## Iteration 3: Cockpit Security UI & Status Overhaul
+### Stage Progress
+- [x] Workspace Detection (Executed on 2026-09-29)
+- [x] Requirements Analysis (Executed on 2026-09-29)
+- [x] User Stories (Executed on 2026-09-29)
+- [x] Workflow Planning (Executed on 2026-09-29)
+- [x] Construction: Unit 1 (Backend Persistence & 5-Phase Pipeline) - COMPLETED
+- [x] Construction: Unit 2 (Cockpit Governance & Expressive Stepper UI) - COMPLETED
+- [x] Construction: Unit 3 (Wiki Scroll Delimitado & Busca) - COMPLETED
+- [x] Build & Test (COMPLETED)
+- [x] Operations (Skipped - Placeholder)
+
+### Iteration 3 Status: COMPLETED (2026-09-29)
+
+## Iteration 4: Persistent Security Run State & Universal Stepper
+### Stage Progress
+- [x] Requirements Analysis (Executed on 2026-09-29)
+- [x] User Stories (Executed on 2026-09-29)
+- [x] Workflow Planning (Executed on 2026-09-29)
+- [x] Construction: Unit 1 (Backend SQLite Schema, Service Persistence & Lockout) - COMPLETED
+- [x] Construction: Unit 2 (Frontend Universal Stepper & Refresh Resilience) - COMPLETED
+  - [x] Functional Design (COMPLETED)
+  - [x] Code Generation (COMPLETED)
+- [x] Build & Test (COMPLETED)
+- [x] Operations (Skipped - Placeholder)
+
+### Iteration 4 Status: COMPLETED (2026-09-29)
+
+
+

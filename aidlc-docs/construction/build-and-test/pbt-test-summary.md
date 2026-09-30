@@ -1,48 +1,61 @@
-# Property-Based Testing (PBT) Execution Summary - Iteration 2
+# Property-Based Testing (PBT) Execution Summary - Iterations 2 & 3
 
 ## Framework: `fast-check` v4
 - **Test Files**:
-  - `packages/server/tests/pbt/unit-1-invariants.test.ts`
-  - `packages/server/tests/pbt/unit-2-invariants.test.ts`
-  - `packages/server/tests/pbt/unit-3-invariants.test.ts`
+  - `packages/server/tests/pbt/security-phase-invariants.test.ts` (Iteration 3 - Unit 1)
+  - `packages/server/tests/pbt/unit-2-cockpit-invariants.test.ts` (Iteration 3 - Unit 2)
+  - `packages/server/tests/pbt/unit-3-wiki-invariants.test.ts` (Iteration 3 - Unit 3)
+  - `packages/server/tests/pbt/unit-1-invariants.test.ts` (Iteration 2 Baseline)
+  - `packages/server/tests/pbt/unit-2-invariants.test.ts` (Iteration 2 Baseline)
+  - `packages/server/tests/pbt/unit-3-invariants.test.ts` (Iteration 2 Baseline)
 - **Execution Target**: Node.js test runner via `ts-node`
 
 ---
 
-## Unit 1 Invariant Properties Verified
+## Iteration 3 Invariants (Cockpit Security UI, Persistence & Wiki Search)
 
+### Unit 1: Security Score Persistence & Phase Invariants
 | Invariant ID | Nome | Execuções | Status | Detalhes |
 | :--- | :--- | :--- | :--- | :--- |
-| **PBT-U1-01** | Token Budget Invariant | 50 | PASSED | Para mensagens arbitrárias e orçamentos variados, o tamanho do contexto final retornado pelo `calculateTokenWindow` respeita os limites de segurança estipulados. |
-| **PBT-U1-02** | Schema Conformance Invariant | 100 | PASSED | Payloads arbitrários satisfazendo os tipos do schema Zod são sempre validados como `success: true`. |
-| **PBT-U1-03** | Template Variable Sanitization | 100 | PASSED | Inserção aleatória de tags de escape como `<system>` e `<instructions>` é 100% neutralizada pela sanitização. |
-| **PBT-U1-04** | Heartbeat Lease Monotonicity | 100 | PASSED | Leases ativas com ociosidade `<= duration` nunca expiram; ociosidade `> duration` sempre expiram de forma determinística. |
+| **PBT-U1-01** | Score Clamping Invariant | 150 | PASSED | Para quaisquer deduções e severidades arbitrárias, o score resultante é sempre um inteiro delimitado em $[0, 100]$. |
+| **PBT-U1-02** | Rating Monotonicity Invariant | 150 | PASSED | A classificação em letras (A/B/C/D/F) é estritamente monotônica: scores maiores nunca recebem letras piores. |
+| **PBT-U1-03** | Phase Sequence Invariant | 100 | PASSED | O pipeline de segurança progride estritamente através das fases 1..5 sem pular etapas ou inverter ordem. |
+
+### Unit 2: Cockpit UI & Calculation Invariants
+| Invariant ID | Nome | Execuções | Status | Detalhes |
+| :--- | :--- | :--- | :--- | :--- |
+| **PBT-U2-03** | Mitigation Percentage Boundedness | 250 | PASSED | Para quaisquer quantidades não-negativas de mitigações e verificações, a porcentagem é um inteiro finito $\in [0, 100]$ e nunca NaN. |
+| **PBT-U2-04** | Zero False-Positive Score Formatting | 100 | PASSED | Scores nulos ou indefinidos NUNCA formatam como "100/100", exibindo estritamente `-- / 100`. |
+
+### Unit 3: Wiki Search & Regex Invariants
+| Invariant ID | Nome | Execuções | Status | Detalhes |
+| :--- | :--- | :--- | :--- | :--- |
+| **PBT-U3-01** | RegExp Escaping Robustness | 300 | PASSED | Para qualquer string arbitrária com caracteres de controle regex, `new RegExp(escapeRegExp(query))` compila sem `SyntaxError`. |
+| **PBT-U3-02** | Content Preservation & Identity | 250 | PASSED | A aplicação e posterior remoção das marcações `<mark>` preserva 100% da integridade textual original. |
+| **PBT-U3-03** | Match Counting Boundedness & Exact Occurrence | 200 | PASSED | A contagem de correspondências é sempre um inteiro $\ge 0$ e identifica com precisão todas as ocorrências. |
 
 ---
 
-## Unit 2 Invariant Properties Verified
+## Iteration 2 Baseline Invariants (Regressão Validada)
 
 | Invariant ID | Nome | Execuções | Status | Detalhes |
 | :--- | :--- | :--- | :--- | :--- |
-| **PBT-U2-01** | Backoff Monotonicity & Ceiling | 100 | PASSED | Para qualquer tentativa 1 a 5 e baseDelay > 0, o delay nominal é estritamente não-decrescente e nunca ultrapassa o teto de 60.000ms. |
-| **PBT-U2-02** | Jitter Boundedness Invariant | 100 | PASSED | Com jitter de ±15%, o delay resultante com ruído randômico sempre permanece contido no intervalo estrito `[0.85 * nominal, 1.15 * nominal]`. |
-| **PBT-U2-03** | Streaming Chunk Concatenation | 100 | PASSED | Para qualquer sequência arbitrária de chunks de texto (letras, pontuação, acentuação), a concatenação acumulada no cliente é idêntica à string gerada pelo modelo. |
-| **PBT-U2-04** | Max Retry Bound Invariant | 50 | PASSED | Quando todas as operações falham, o executor adaptativo realiza estritamente `maxAttempts` (padrão 5) antes de declarar exaustão e pausar o grafo. |
+| **PBT-U1-01** | Token Budget Invariant | 100 | PASSED | Contexto acumulado no chat respeita o orçamento de tokens. |
+| **PBT-U1-02** | Schema Conformance Invariant | 100 | PASSED | Payloads válidos satisfazem schemas Zod. |
+| **PBT-U1-03** | Template Variable Sanitization | 100 | PASSED | Tags de prompt injection são 100% neutralizadas. |
+| **PBT-U1-04** | Heartbeat Lease Monotonicity | 100 | PASSED | Leases ativas com ociosidade `<= duration` nunca expiram. |
+| **PBT-U2-01** | Backoff Monotonicity & Ceiling | 100 | PASSED | Exponential backoff respeita teto de 60.000ms. |
+| **PBT-U2-02** | Jitter Boundedness Invariant | 100 | PASSED | Jitter permanece no intervalo $\pm 15\%$. |
+| **PBT-U2-03** | Streaming Chunk Concatenation | 100 | PASSED | Chunks acumulados reconstroem o texto original. |
+| **PBT-U2-04** | Max Retry Bound Invariant | 100 | PASSED | Máximo de 5 tentativas antes de declarar exaustão. |
+| **PBT-U3-01** | Sensitive Files Blocking Invariant | 100 | PASSED | Arquivos confidenciais são bloqueados antes de commits. |
+| **PBT-U3-02** | Safe Files Non-Blocking Invariant | 100 | PASSED | Arquivos legítimos nunca são falsamente bloqueados. |
+| **PBT-U3-03** | Conventional Commits Syntax | 100 | PASSED | Mensagens geradas seguem padrão semântico. |
+| **PBT-U3-04** | Resilient Backup Branch Name | 100 | PASSED | Branches de backup atendem à especificação do Git. |
 
 ---
 
-## Unit 3 Invariant Properties Verified
-
-| Invariant ID | Nome | Execuções | Status | Detalhes |
-| :--- | :--- | :--- | :--- | :--- |
-| **PBT-U3-01** | Sensitive Files Blocking Invariant | 100 | PASSED | Para qualquer nível de aninhamento de diretórios combinado com extensões e arquivos sensíveis (.env, .pem, .key, id_rsa, credentials.json), o commit é 100% bloqueado com identificação exata da violação. |
-| **PBT-U3-02** | Safe Files Non-Blocking Invariant | 100 | PASSED | Arquivos de código e documentação legítimos (.ts, .tsx, .js, .md, .sql) com nomes arbitrários nunca são falsamente bloqueados. |
-| **PBT-U3-03** | Conventional Commits Syntax | 100 | PASSED | Para qualquer título de tarefa gerado, a mensagem semântica sugerida satisfaz rigorosamente a regex de Conventional Commits `^(feat\|fix\|refactor\|docs\|test\|chore)(\([a-z0-9_-]+\))?: [^\r\n]+$`. |
-| **PBT-U3-04** | Resilient Backup Branch Name | 50 | PASSED | Para qualquer timestamp arbitrário, o formato de branch de backup gerado `backup/rejected-<timestamp>` obedece rigorosamente às especificações de refnames do Git (`git check-ref-format`). |
-
----
-
-## Summary
-- **Total de Invariantes Testadas**: 12
-- **Total de Amostras Geradas Proceduralmente**: 1.050 casos de teste gerados com `fast-check`
-- **Taxa de Sucesso**: 100% (0 falhas, 0 regressões)
+## Resumo Geral de PBT
+- **Total de Invariantes Testadas**: 20 invariantes
+- **Total de Amostras Geradas Proceduralmente**: 2.550 execuções com `fast-check`
+- **Taxa de Aprovação**: 100% (0 falhas, 0 regressões)

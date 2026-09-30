@@ -31,6 +31,7 @@ declare module 'lucide-react' {
   export const AlertCircle: Icon;
   export const Check: Icon;
   export const X: Icon;
+  export const Search: Icon;
   export const Plus: Icon;
   export const ChevronRight: Icon;
   export const Info: Icon;

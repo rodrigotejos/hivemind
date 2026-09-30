@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
-import { ArrowLeft, BrainCircuit, Users, Terminal, Sparkles, ShieldCheck } from 'lucide-react';
+import { ArrowLeft, BrainCircuit, Users, Terminal, Sparkles, ShieldCheck, Search, X } from 'lucide-react';
 import AgentStatus from '../components/AgentStatus';
 import CockpitPanel from '../components/CockpitPanel';
 import SecurityAuditPanel from '../components/SecurityAuditPanel';
@@ -13,6 +13,33 @@ export default function ProjectView() {
   const [project, setProject] = useState<any>(null);
   const [agents, setAgents] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'overview' | 'security' | 'figma'>('overview');
+  const [wikiSearchQuery, setWikiSearchQuery] = useState('');
+
+  const escapeRegExp = (text: string) => text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+  const highlightMatches = (text: string, query: string) => {
+    if (!query.trim()) return text;
+    const escaped = escapeRegExp(query.trim());
+    const regex = new RegExp(`(${escaped})`, 'gi');
+    const parts = text.split(regex);
+    return parts.map((part, index) => 
+      part.toLowerCase() === query.trim().toLowerCase() ? (
+        <mark key={index} className="bg-amber-400/30 text-amber-200 px-0.5 rounded font-semibold">
+          {part}
+        </mark>
+      ) : (
+        part
+      )
+    );
+  };
+
+  const countMatches = (text: string, query: string) => {
+    if (!query.trim() || !text) return 0;
+    const escaped = escapeRegExp(query.trim());
+    const regex = new RegExp(escaped, 'gi');
+    const matches = text.match(regex);
+    return matches ? matches.length : 0;
+  };
 
   useEffect(() => {
     fetch(`${API_URL}/api/projects/${id}`)
@@ -32,6 +59,8 @@ export default function ProjectView() {
       </div>
     </div>
   );
+
+  const totalMatches = countMatches(project.shared_context || '', wikiSearchQuery);
 
   return (
     <div className="p-8 max-w-7xl mx-auto min-h-screen space-y-8">
@@ -58,7 +87,12 @@ export default function ProjectView() {
       </div>
 
       {/* Cockpit Human-in-the-Loop & Governança */}
-      <CockpitPanel projectId={id || ''} apiUrl={API_URL} />
+      <CockpitPanel 
+        projectId={id || ''} 
+        apiUrl={API_URL} 
+        project={project} 
+        hideSecurityCard={activeTab === 'security'} 
+      />
 
       {/* Navegação de Abas do Projeto */}
       <div className="flex items-center gap-3 border-b border-zinc-800 pb-2 flex-wrap">
@@ -110,21 +144,58 @@ export default function ProjectView() {
           <div className="lg:col-span-2 space-y-8">
             <div className="glass-card p-1 rounded-2xl relative">
               <div className="absolute inset-0 bg-gradient-to-r from-indigo-500/20 via-purple-500/20 to-cyan-500/20 blur-xl opacity-50 rounded-2xl"></div>
-              <div className="relative bg-zinc-950/80 backdrop-blur-xl p-8 rounded-xl border border-white/5 h-full">
-                <div className="flex items-center justify-between mb-6">
-                  <h2 className="text-lg font-bold flex items-center gap-3 text-white">
+              <div className="relative bg-zinc-950/80 backdrop-blur-xl p-6 md:p-8 rounded-xl border border-white/5 h-full">
+                {/* Header com Título, Indicador de IA e Barra de Busca */}
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-5 pb-4 border-b border-zinc-800/80">
+                  <div className="flex items-center gap-3">
                     <div className="p-2 bg-indigo-500/10 rounded-lg">
-                      <BrainCircuit className="text-indigo-400" size={24} /> 
+                      <BrainCircuit className="text-indigo-400" size={22} />
                     </div>
-                    Executive Summary
-                  </h2>
-                  <div className="flex items-center gap-2 text-xs font-mono text-zinc-500">
-                    <Sparkles size={14} className="text-amber-500" /> AI-Generated
+                    <div>
+                      <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                        Executive Summary & Wiki Técnica
+                      </h2>
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-zinc-500 mt-0.5">
+                        <Sparkles size={12} className="text-amber-500" /> AI-Generated Wiki
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Campo de Busca Simples */}
+                  <div className="flex items-center gap-2">
+                    <div className="relative flex items-center">
+                      <Search size={14} className="absolute left-3 text-zinc-500 pointer-events-none" />
+                      <input
+                        type="text"
+                        value={wikiSearchQuery}
+                        onChange={(e) => setWikiSearchQuery(e.target.value)}
+                        placeholder="Buscar na wiki (ex: PBT, rotas)..."
+                        className="pl-8 pr-7 py-1.5 bg-zinc-900 border border-zinc-800 focus:border-indigo-500/60 rounded-lg text-xs text-white placeholder-zinc-500 w-48 sm:w-64 focus:outline-none transition-all"
+                      />
+                      {wikiSearchQuery && (
+                        <button
+                          onClick={() => setWikiSearchQuery('')}
+                          className="absolute right-2 text-zinc-500 hover:text-zinc-300 p-0.5"
+                          title="Limpar busca"
+                        >
+                          <X size={12} />
+                        </button>
+                      )}
+                    </div>
+                    {wikiSearchQuery.trim() && (
+                      <span className="text-[10px] font-mono text-zinc-400 bg-zinc-900 border border-zinc-800 px-2 py-1 rounded-md shrink-0">
+                        {totalMatches} {totalMatches === 1 ? 'resultado' : 'resultados'}
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="prose prose-invert prose-sm max-w-none text-zinc-300">
+
+                {/* Container com Scroll Delimitado e Highlighting */}
+                <div className="max-h-[550px] overflow-y-auto pr-3 space-y-3 custom-scrollbar text-zinc-300 text-xs md:text-sm leading-relaxed">
                   {(project.shared_context || 'Nenhum contexto gerado ainda.').split('\n').map((para: string, i: number) => (
-                    <p key={i} className="mb-4 leading-relaxed">{para}</p>
+                    <p key={i} className="mb-3 leading-relaxed">
+                      {highlightMatches(para, wikiSearchQuery)}
+                    </p>
                   ))}
                 </div>
               </div>

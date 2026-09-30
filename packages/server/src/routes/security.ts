@@ -5,6 +5,7 @@ import * as queries from '../db/queries';
 import { io } from '../index';
 import { LangGraphOrchestrator } from '../services/langgraph';
 import { BridgeDaemonService } from '../services/bridge/bridge-daemon';
+import { SecurityPipelineService } from '../services/security-pipeline';
 
 const execPromise = util.promisify(exec);
 export const securityRouter = Router();
@@ -89,10 +90,29 @@ securityRouter.delete('/projects/:projectId/security/findings/:findingId', (req:
   }
 });
 
+// GET /api/projects/:projectId/security/run-status - Consulta o último run e status de execução (US-14)
+securityRouter.get('/projects/:projectId/security/run-status', (req: Request, res: Response): void => {
+  const { projectId } = req.params;
+
+  try {
+    const latestRun = queries.getLatestSecurityRun(projectId);
+    const isRunning = SecurityPipelineService.getInstance().isScanRunning(projectId);
+
+    res.json({
+      success: true,
+      projectId,
+      isRunning,
+      latestRun,
+    });
+  } catch (err: any) {
+    res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // POST /api/projects/:projectId/security/scan - Dispara auditoria adversarial Red Team sob demanda
 securityRouter.post('/projects/:projectId/security/scan', async (req: Request, res: Response): Promise<void> => {
   const { projectId } = req.params;
-  const { sessionId } = req.body;
+  const { sessionId, model, reasoningLevel } = req.body || {};
 
   try {
     const project = queries.getProject(projectId);
@@ -101,24 +121,34 @@ securityRouter.post('/projects/:projectId/security/scan', async (req: Request, r
       return;
     }
 
-    const goal = 'Auditoria de Segurança Adversarial Red Team vs. Blue Team completa: Mapear vulnerabilidades OWASP Top 10, injeções, proteção de credenciais e sanitização.';
-    
-    LangGraphOrchestrator.getInstance().startTask(
-      projectId,
-      `scan_${Date.now()}`,
-      goal,
-      5,
-      sessionId || 'general',
-      'auto',
-      'high'
-    ).catch((err: any) => {
-      console.error('Erro ao executar Security Scan:', err);
+    const pipeline = SecurityPipelineService.getInstance();
+    if (pipeline.isScanRunning(projectId)) {
+      const activeRun = queries.getActiveSecurityRun(projectId);
+      res.status(409).json({
+        success: false,
+        error: 'SCAN_ALREADY_RUNNING',
+        message: 'Auditoria de segurança já está em andamento para este projeto.',
+        projectId,
+        activeRun,
+      });
+      return;
+    }
+
+    // Dispara pipeline determinístico de 5 fases assincronamente com o agente real
+    pipeline.runPipeline(projectId, {
+      sessionId,
+      model,
+      reasoningLevel,
+      io,
+    }).catch((err: any) => {
+      console.error('Erro ao executar Security Pipeline:', err);
     });
 
     res.json({
       success: true,
-      message: 'Auditoria de Segurança Red Team disparada com sucesso.',
+      message: 'Auditoria de Segurança (Pipeline de 5 Fases) iniciada com sucesso.',
       projectId,
+      totalPhases: 5,
     });
   } catch (err: any) {
     res.status(500).json({ success: false, error: err.message });

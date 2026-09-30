@@ -3,6 +3,10 @@ CREATE TABLE IF NOT EXISTS projects (
   name          TEXT NOT NULL,
   description   TEXT,
   shared_context TEXT,
+  path          TEXT,
+  security_score INTEGER DEFAULT NULL,
+  security_rating TEXT DEFAULT NULL,
+  last_security_audit_at DATETIME DEFAULT NULL,
   status        TEXT DEFAULT 'active', -- active | paused | archived
   created_at    DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at    DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -111,5 +115,27 @@ CREATE TABLE IF NOT EXISTS ui_components (
 );
 
 CREATE INDEX IF NOT EXISTS idx_ui_components_project ON ui_components(project_id, created_at);
+
+CREATE TABLE IF NOT EXISTS security_runs (
+  id               TEXT PRIMARY KEY,
+  project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+  phase            INTEGER NOT NULL DEFAULT 1,
+  total_phases     INTEGER NOT NULL DEFAULT 5,
+  phase_name       TEXT NOT NULL,
+  status           TEXT NOT NULL DEFAULT 'running', -- running | completed | failed
+  agent_role       TEXT NOT NULL,                  -- delta-security | beta-backend | system
+  agent_name       TEXT NOT NULL,
+  current_check    TEXT,
+  target_file      TEXT,
+  findings_count   INTEGER DEFAULT 0,
+  score            INTEGER DEFAULT NULL,
+  started_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+  completed_at     DATETIME DEFAULT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_security_runs_project_status ON security_runs(project_id, status);
+CREATE INDEX IF NOT EXISTS idx_security_runs_project_started ON security_runs(project_id, started_at DESC);
+
 
 

@@ -78,22 +78,12 @@ export function resolveModelConfig(
     }
   }
 
-  // Mapeamento normalizado para a API do Google Gemini 3
-  let actualModelName = 'gemini-3.7-flash';
-  if (targetModel.includes('flex')) {
-    actualModelName = 'gemini-3.5-flash-lite';
-  } else if (targetModel.includes('3.5-flash-lite') || targetModel.includes('lite')) {
-    actualModelName = 'gemini-3.5-flash-lite';
-  } else if (targetModel.includes('3.6-flash')) {
-    actualModelName = 'gemini-3.6-flash';
-  } else if (targetModel.includes('3.5-flash')) {
-    actualModelName = 'gemini-3.5-flash';
-  } else if (targetModel.includes('3.1-pro') || targetModel.includes('pro')) {
-    actualModelName = 'gemini-3.7-flash';
-  } else if (targetModel.includes('2.5-flash')) {
-    actualModelName = 'gemini-2.5-flash';
+  // Mapeamento normalizado para a API do Google Gemini
+  let actualModelName = 'gemini-2.5-flash';
+  if (targetModel.includes('pro')) {
+    actualModelName = 'gemini-2.5-pro';
   } else {
-    actualModelName = 'gemini-3.7-flash';
+    actualModelName = 'gemini-2.5-flash';
   }
 
   // Thinking Budget por Reasoning Level

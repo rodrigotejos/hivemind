@@ -144,3 +144,7 @@ vite.config.ts.timestamp-*
 
 # AI-DLC workflow directory
 .aidlc/
+
+# SQLite WAL
+*.sqlite-wal
+*.sqlite-shm

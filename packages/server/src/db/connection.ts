@@ -29,6 +29,46 @@ export function initDb() {
   } catch (e) {}
 
   try {
+    db.exec('ALTER TABLE projects ADD COLUMN security_score INTEGER DEFAULT NULL');
+  } catch (e) {}
+
+  try {
+    db.exec('ALTER TABLE projects ADD COLUMN security_rating TEXT DEFAULT NULL');
+  } catch (e) {}
+
+  try {
+    db.exec('ALTER TABLE projects ADD COLUMN last_security_audit_at DATETIME DEFAULT NULL');
+  } catch (e) {}
+
+  try {
+    db.exec(`
+      CREATE TABLE IF NOT EXISTS security_runs (
+        id               TEXT PRIMARY KEY,
+        project_id       TEXT NOT NULL REFERENCES projects(id) ON DELETE CASCADE,
+        phase            INTEGER NOT NULL DEFAULT 1,
+        total_phases     INTEGER NOT NULL DEFAULT 5,
+        phase_name       TEXT NOT NULL,
+        status           TEXT NOT NULL DEFAULT 'running',
+        agent_role       TEXT NOT NULL,
+        agent_name       TEXT NOT NULL,
+        current_check    TEXT,
+        target_file      TEXT,
+        findings_count   INTEGER DEFAULT 0,
+        score            INTEGER DEFAULT NULL,
+        started_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at       DATETIME DEFAULT CURRENT_TIMESTAMP,
+        completed_at     DATETIME DEFAULT NULL
+      );
+      CREATE INDEX IF NOT EXISTS idx_security_runs_project_status ON security_runs(project_id, status);
+      CREATE INDEX IF NOT EXISTS idx_security_runs_project_started ON security_runs(project_id, started_at DESC);
+    `);
+
+    if (process.env.NODE_ENV !== 'test') {
+      db.exec("UPDATE security_runs SET status = 'failed', current_check = 'Interrompido por reinicialização do servidor' WHERE status = 'running'");
+    }
+  } catch (e) {}
+
+  try {
     db.exec(`
       CREATE TABLE IF NOT EXISTS task_sessions (
         id TEXT PRIMARY KEY DEFAULT (lower(hex(randomblob(8)))),
@@ -132,6 +172,33 @@ export function initDb() {
           'Mitigação Blue Team: Uso de dotenv com .env.example, verificação no .gitignore e mascaramento de logs no BridgeDaemon.',
           'verified', '.env'
         );
+      }
+    }
+  } catch (e) {}
+
+  // Backfill scores consolidados para projetos existentes
+  try {
+    const projectsWithoutScore = db.prepare('SELECT id FROM projects WHERE security_score IS NULL').all() as any[];
+    for (const p of projectsWithoutScore) {
+      const findings = db.prepare('SELECT status, severity FROM security_findings WHERE project_id = ?').all(p.id) as any[];
+      if (findings && findings.length > 0) {
+        let deductions = 0;
+        for (const f of findings) {
+          if (f.status === 'open') {
+            if (f.severity === 'critical') deductions += 25;
+            else if (f.severity === 'high') deductions += 15;
+            else if (f.severity === 'medium') deductions += 8;
+            else if (f.severity === 'low') deductions += 3;
+          } else if (f.status === 'mitigating') {
+            if (f.severity === 'critical') deductions += 12;
+            else if (f.severity === 'high') deductions += 7;
+            else if (f.severity === 'medium') deductions += 4;
+            else if (f.severity === 'low') deductions += 1;
+          }
+        }
+        const score = Math.max(0, Math.min(100, 100 - deductions));
+        const rating = score >= 95 ? 'A+' : score >= 85 ? 'A' : score >= 75 ? 'B' : score >= 60 ? 'C' : 'F';
+        db.prepare('UPDATE projects SET security_score = ?, security_rating = ?, last_security_audit_at = CURRENT_TIMESTAMP WHERE id = ?').run(score, rating, p.id);
       }
     }
   } catch (e) {}

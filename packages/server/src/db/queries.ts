@@ -218,6 +218,11 @@ export function getProjectSecuritySummary(projectId: string) {
     score >= 75 ? 'B' :
     score >= 60 ? 'C' : 'F';
 
+  // Sincroniza atomicamente com a tabela projects
+  try {
+    updateProjectSecurityScore(projectId, score, rating);
+  } catch (e) {}
+
   return {
     score,
     rating,
@@ -226,6 +231,15 @@ export function getProjectSecuritySummary(projectId: string) {
     statusCounts,
     findings,
   };
+}
+
+export function updateProjectSecurityScore(projectId: string, score: number, rating: string) {
+  db.prepare(`
+    UPDATE projects 
+    SET security_score = ?, security_rating = ?, last_security_audit_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP 
+    WHERE id = ?
+  `).run(score, rating, projectId);
+  return getProject(projectId);
 }
 
 export function createSecurityFinding(data: {
@@ -313,6 +327,147 @@ export function createUIComponent(data: {
 export function deleteUIComponent(id: string) {
   return db.prepare('DELETE FROM ui_components WHERE id = ?').run(id);
 }
+
+// Security Runs Queries & Types (US-13, US-14, US-15)
+export interface SecurityRun {
+  id: string;
+  project_id: string;
+  phase: number;
+  total_phases: number;
+  phase_name: string;
+  status: 'running' | 'completed' | 'failed';
+  agent_role: 'delta-security' | 'beta-backend' | 'system';
+  agent_name: string;
+  current_check: string | null;
+  target_file: string | null;
+  findings_count: number;
+  score: number | null;
+  started_at: string;
+  updated_at: string;
+  completed_at: string | null;
+}
+
+export function createSecurityRun(data: {
+  id: string;
+  projectId: string;
+  phase?: number;
+  totalPhases?: number;
+  phaseName: string;
+  status?: 'running' | 'completed' | 'failed';
+  agentRole: 'delta-security' | 'beta-backend' | 'system';
+  agentName: string;
+  currentCheck?: string;
+  targetFile?: string;
+  findingsCount?: number;
+  score?: number | null;
+}): SecurityRun {
+  const stmt = db.prepare(`
+    INSERT INTO security_runs (
+      id, project_id, phase, total_phases, phase_name, status,
+      agent_role, agent_name, current_check, target_file,
+      findings_count, score, started_at, updated_at, completed_at
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP, NULL)
+    RETURNING *
+  `);
+  return stmt.get(
+    data.id,
+    data.projectId,
+    data.phase || 1,
+    data.totalPhases || 5,
+    data.phaseName,
+    data.status || 'running',
+    data.agentRole,
+    data.agentName,
+    data.currentCheck || null,
+    data.targetFile || null,
+    data.findingsCount || 0,
+    data.score !== undefined ? data.score : null
+  ) as unknown as SecurityRun;
+}
+
+export function updateSecurityRunProgress(
+  runId: string,
+  updates: Partial<Omit<SecurityRun, 'id' | 'project_id' | 'started_at'>>
+): SecurityRun | null {
+  const fields: string[] = [];
+  const values: any[] = [];
+
+  if (updates.phase !== undefined) {
+    fields.push('phase = ?');
+    values.push(updates.phase);
+  }
+  if (updates.total_phases !== undefined) {
+    fields.push('total_phases = ?');
+    values.push(updates.total_phases);
+  }
+  if (updates.phase_name !== undefined) {
+    fields.push('phase_name = ?');
+    values.push(updates.phase_name);
+  }
+  if (updates.status !== undefined) {
+    fields.push('status = ?');
+    values.push(updates.status);
+    if (updates.status === 'completed' || updates.status === 'failed') {
+      fields.push('completed_at = CURRENT_TIMESTAMP');
+    }
+  }
+  if (updates.agent_role !== undefined) {
+    fields.push('agent_role = ?');
+    values.push(updates.agent_role);
+  }
+  if (updates.agent_name !== undefined) {
+    fields.push('agent_name = ?');
+    values.push(updates.agent_name);
+  }
+  if (updates.current_check !== undefined) {
+    fields.push('current_check = ?');
+    values.push(updates.current_check);
+  }
+  if (updates.target_file !== undefined) {
+    fields.push('target_file = ?');
+    values.push(updates.target_file);
+  }
+  if (updates.findings_count !== undefined) {
+    fields.push('findings_count = ?');
+    values.push(updates.findings_count);
+  }
+  if (updates.score !== undefined) {
+    fields.push('score = ?');
+    values.push(updates.score);
+  }
+
+  fields.push('updated_at = CURRENT_TIMESTAMP');
+  values.push(runId);
+
+  const stmt = db.prepare(`
+    UPDATE security_runs
+    SET ${fields.join(', ')}
+    WHERE id = ?
+    RETURNING *
+  `);
+
+  return (stmt.get(...values) as unknown as SecurityRun) || null;
+}
+
+export function getLatestSecurityRun(projectId: string): SecurityRun | null {
+  return (db.prepare(`
+    SELECT * FROM security_runs
+    WHERE project_id = ?
+    ORDER BY started_at DESC, rowid DESC
+    LIMIT 1
+  `).get(projectId) as unknown as SecurityRun) || null;
+}
+
+export function getActiveSecurityRun(projectId: string): SecurityRun | null {
+  return (db.prepare(`
+    SELECT * FROM security_runs
+    WHERE project_id = ? AND status = 'running'
+    ORDER BY started_at DESC
+    LIMIT 1
+  `).get(projectId) as unknown as SecurityRun) || null;
+}
+
 
 
 

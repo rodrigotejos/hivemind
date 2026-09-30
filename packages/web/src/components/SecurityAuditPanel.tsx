@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { io } from 'socket.io-client';
 import GitDiffModal from './GitDiffModal';
+import SecurityStepper, { type SecurityPhaseProgressPayload } from './SecurityStepper';
 
 export interface SecurityFinding {
   id: string;
@@ -56,6 +57,7 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
   const [summary, setSummary] = useState<SecuritySummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [scanning, setScanning] = useState(false);
+  const [phaseProgress, setPhaseProgress] = useState<SecurityPhaseProgressPayload | null>(null);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [severityFilter, setSeverityFilter] = useState<string>('all');
   const [expandedFindings, setExpandedFindings] = useState<Record<string, boolean>>({});
@@ -77,8 +79,42 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
     }
   };
 
+  const fetchRunStatus = async () => {
+    try {
+      const res = await fetch(`${apiUrl}/api/projects/${projectId}/security/run-status`);
+      const data = await res.json();
+      if (data.success && data.latestRun) {
+        const run = data.latestRun;
+        setPhaseProgress({
+          projectId: run.project_id,
+          runId: run.id,
+          phase: run.phase,
+          totalPhases: run.total_phases,
+          phaseName: run.phase_name,
+          agentRole: run.agent_role,
+          agentName: run.agent_name,
+          currentCheck: run.current_check,
+          targetFile: run.target_file || undefined,
+          findingsCountSoFar: run.findings_count,
+          scoreSoFar: run.score,
+          status: run.status === 'failed' ? 'error' : run.status,
+          timestamp: run.updated_at,
+        });
+
+        if (run.status === 'running' || data.isRunning) {
+          setScanning(true);
+        } else if (run.status === 'completed') {
+          setScanning(false);
+        }
+      }
+    } catch (e) {
+      console.error('Erro ao buscar status do run de segurança:', e);
+    }
+  };
+
   useEffect(() => {
     fetchSecurityData();
+    fetchRunStatus();
 
     const socket = io(apiUrl);
     socket.emit('join_project', { projectId });
@@ -86,6 +122,18 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
     socket.on('security_updated', (data) => {
       if (data.summary) {
         setSummary(data.summary);
+      }
+    });
+
+    socket.on('security_phase_progress', (data: SecurityPhaseProgressPayload) => {
+      setPhaseProgress(data);
+      if (data.status === 'running') {
+        setScanning(true);
+      } else if (data.status === 'completed') {
+        setScanning(false);
+        fetchSecurityData();
+      } else if (data.status === 'error' || data.status === 'failed') {
+        setScanning(false);
       }
     });
 
@@ -133,18 +181,57 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
 
   const handleTriggerScan = async () => {
     setScanning(true);
+    setPhaseProgress({
+      projectId,
+      phase: 1,
+      totalPhases: 5,
+      phaseName: 'Auditoria de Superfície de Ataque & CORS',
+      agentRole: 'delta-security',
+      agentName: 'Delta Security (Red Team)',
+      currentCheck: 'Iniciando varredura de endpoints e rotas expostas...',
+      findingsCountSoFar: summary?.totalFindings || 0,
+      scoreSoFar: summary?.score ?? 100,
+      status: 'running',
+      timestamp: new Date().toISOString(),
+    });
+
     try {
-      await fetch(`${apiUrl}/api/projects/${projectId}/security/scan`, {
+      const res = await fetch(`${apiUrl}/api/projects/${projectId}/security/scan`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projectId }),
+        body: JSON.stringify({
+          projectId,
+          sessionId: 'general',
+          model: 'auto',
+          reasoningLevel: 'high',
+        }),
       });
-      setTimeout(() => {
+      const data = await res.json();
+      if (res.status === 409 && data.activeRun) {
+        // Conflito de concorrência: auditoria já em andamento
+        const run = data.activeRun;
+        setPhaseProgress({
+          projectId: run.project_id,
+          runId: run.id,
+          phase: run.phase,
+          totalPhases: run.total_phases,
+          phaseName: run.phase_name,
+          agentRole: run.agent_role,
+          agentName: run.agent_name,
+          currentCheck: run.current_check,
+          targetFile: run.target_file || undefined,
+          findingsCountSoFar: run.findings_count,
+          scoreSoFar: run.score,
+          status: 'running',
+          timestamp: run.updated_at,
+        });
+        setScanning(true);
+      } else if (!res.ok) {
+        console.error('Falha ao disparar scan de segurança:', data.error || data.message);
         setScanning(false);
-        fetchSecurityData();
-      }, 3000);
+      }
     } catch (e) {
-      console.error('Falha ao disparar scan:', e);
+      console.error('Falha ao disparar scan de segurança:', e);
       setScanning(false);
     }
   };
@@ -258,13 +345,13 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
           <div className="flex items-center gap-3 w-full lg:w-auto justify-between lg:justify-end">
             <button
               onClick={handleTriggerScan}
-              disabled={scanning}
-              className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 text-white rounded-xl text-xs font-semibold transition-all shadow-[0_0_15px_rgba(225,29,72,0.3)] hover:shadow-[0_0_20px_rgba(225,29,72,0.5)]"
+              disabled={scanning || phaseProgress?.status === 'running'}
+              className="flex items-center gap-2 px-4 py-2.5 bg-rose-600 hover:bg-rose-500 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-xl text-xs font-semibold transition-all shadow-[0_0_15px_rgba(225,29,72,0.3)] hover:shadow-[0_0_20px_rgba(225,29,72,0.5)] cursor-pointer"
             >
-              {scanning ? (
+              {scanning || phaseProgress?.status === 'running' ? (
                 <>
                   <RefreshCw size={14} className="animate-spin" />
-                  Auditando Código...
+                  Auditando Código (Fase {phaseProgress?.phase || 1}/5)...
                 </>
               ) : (
                 <>
@@ -274,6 +361,15 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
               )}
             </button>
           </div>
+        </div>
+
+        {/* Stepper Universal de 5 Fases Determinísticas & Live Ticker */}
+        <div className="mt-6 pt-6 border-t border-zinc-800/80">
+          <SecurityStepper
+            phaseProgress={phaseProgress}
+            isScanning={scanning}
+            lastAuditAt={(summary as any)?.last_security_audit_at || (summary as any)?.lastAuditAt}
+          />
         </div>
 
         {/* Breakdown de Severidades & Status */}
@@ -310,10 +406,22 @@ export default function SecurityAuditPanel({ projectId, apiUrl }: SecurityAuditP
 
           <div className="bg-zinc-900/60 border border-zinc-800 rounded-xl p-3 flex items-center justify-between">
             <div>
-              <span className="text-[11px] text-zinc-400 block">100% Verificadas</span>
-              <span className="text-sm font-bold text-emerald-400">
-                {summary?.statusCounts.verified || 0}
-              </span>
+              <span className="text-[11px] text-zinc-400 block">Mitigações Verificadas</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className="text-sm font-bold text-emerald-400">
+                  {summary?.statusCounts.verified || 0}
+                </span>
+                {(() => {
+                  const verified = summary?.statusCounts.verified || 0;
+                  const total = (summary?.statusCounts.mitigated || 0) + verified;
+                  const pct = total > 0 ? Math.round((verified / total) * 100) : 0;
+                  return (
+                    <span className="text-[10px] text-zinc-400 font-mono">
+                      ({pct}% de {total})
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
             <CheckCircle size={20} className="text-emerald-400/60" />
           </div>

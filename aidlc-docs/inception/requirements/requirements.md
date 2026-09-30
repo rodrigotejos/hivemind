@@ -1,52 +1,58 @@
-# Requirements Analysis Document
+# Requirements Specification: Iteration 4 - Persistent Security Run State & Universal Stepper
 
-## Intent Analysis Summary
-- **User Request**: Realizar validação minuciosa do código usando MCP codebase-memory e criar um plano primário de melhorias e novas features estruturadas por complexidade/impacto.
-- **Request Type**: Enhancement, Refactoring, New Features
-- **Scope Estimate**: System-wide (Afeta `server`, arquitetura LangGraph, `ai-manager`, UI Cockpit)
-- **Complexity Estimate**: Complex
-
-## Contexto e Escopo
-A validação do código atual detectou oportunidades de melhoria na segurança, performance de LLM e experiência do usuário no Cockpit. Com base nas respostas do usuário (A para ambas as perguntas do plano primário), o escopo para esta iteração de desenvolvimento abrange *todas* as melhorias propostas e *todas* as novas features.
+## 1. Intent Analysis Summary
+- **User Request**: Persistência do estado do pipeline de segurança no SQLite (`security_runs`), resiliência total contra page refresh (F5) e alternância de abas, bloqueio estrito contra scans simultâneos (idempotência no banco), Stepper universal presente tanto no `SecurityAuditPanel` quanto no `CockpitPanel`, e preservação completa do runtime de agentes do LangGraph.
+- **Request Type**: Enhancement / Architecture Hardening & UX State Persistence
+- **Scope Estimate**: Backend SQLite Schema, Queries, SecurityPipelineService, REST Routes, Socket.IO re-sync, e Frontend React (CockpitPanel e SecurityAuditPanel).
+- **Complexity Estimate**: Média-Alta (gestão de concorrência distribuída entre memória e banco, sincronização WebSocket resiliente a reconexões).
 
 ---
 
-## Functional Requirements
+## 2. Functional Requirements (FR)
 
-### FR1: Prompts Performance (Desacoplamento)
-- Extrair todos os prompts hardcoded dos arquivos TypeScript (especialmente em `ai-manager.ts` e `nodes.ts`).
-- Migrar os prompts para um sistema de registro ou arquivos separados (Markdown/JSON) que permita fácil manutenção e hot-reload sem necessidade de recompilar o código base.
+### FR-01: Tabela `security_runs` no SQLite & Auto-Migração
+- O banco de dados deve criar a tabela `security_runs` com os campos:
+  - `id TEXT PRIMARY KEY`: Identificador único da execução (ex: `sec_run_<timestamp>_<hash>`).
+  - `project_id TEXT NOT NULL`: Chave estrangeira referenciando o projeto.
+  - `phase INTEGER NOT NULL`: Fase atual ($1..5$, ou $0$ em falha).
+  - `total_phases INTEGER NOT NULL DEFAULT 5`: Total de fases.
+  - `phase_name TEXT NOT NULL`: Nome legível da etapa.
+  - `status TEXT NOT NULL`: `'running' | 'completed' | 'failed'`.
+  - `agent_role TEXT NOT NULL`: Papel do agente ativo (`delta-security`, `beta-backend`, `system`).
+  - `agent_name TEXT NOT NULL`: Nome legível do agente.
+  - `current_check TEXT`: Descrição da verificação técnica em andamento.
+  - `target_file TEXT`: Arquivo inspecionado no momento.
+  - `findings_count INTEGER DEFAULT 0`: Quantidade de achados computados até a fase.
+  - `score INTEGER DEFAULT NULL`: Score parcial ou final.
+  - `started_at DATETIME DEFAULT CURRENT_TIMESTAMP`: Data de início.
+  - `updated_at DATETIME DEFAULT CURRENT_TIMESTAMP`: Data da última transição de fase.
+  - `completed_at DATETIME DEFAULT NULL`: Data de conclusão.
 
-### FR2: Real-time Streaming no Cockpit
-- Modificar o fluxo de execução dos nós do LangGraph e do AI Manager para suportar "streaming" de texto.
-- Implementar eventos via Socket.IO que transmitam a resposta em "typing effect" para a interface de UI (Cockpit), substituindo o modelo atual que aguarda o retorno completo do LLM antes de exibir a mensagem.
+### FR-02: Registro e Atualização Contínua no `SecurityPipelineService`
+- Ao iniciar uma auditoria, o serviço gera um novo `run_id`, persiste o registro inicial (`phase: 1, status: 'running'`) e associa ao `activeScans`.
+- A cada transição de fase ($1 \rightarrow 2 \rightarrow 3 \rightarrow 4 \rightarrow 5$), o serviço atualiza a linha daquele `run_id` no SQLite (`queries.updateSecurityRunProgress(...)`).
+- Na Fase 5, atualiza `status: 'completed'`, `completed_at: CURRENT_TIMESTAMP` e persiste o score na tabela `projects`.
+- Em caso de exceção, marca `status: 'failed'` com a mensagem de erro em `current_check`.
 
-### FR3: Agente de Auto-Recovery
-- Implementar lógica de fallback resiliente no `ai-manager.ts` e nos workers do LangGraph.
-- Se a API do Google Gemini retornar erro de rate limit (429) ou timeout, o sistema deve enfileirar a chamada para re-tentativa (retry pattern com backoff) ao invés de devolver uma string de fallback estática.
-- Notificar o usuário via Cockpit sobre o status de recovery.
+### FR-03: Endpoint de Consulta `GET /api/projects/:projectId/security/run-status`
+- O backend deve expor rota para consultar a execução mais recente (`getLatestSecurityRun(projectId)`).
+- Retorna o objeto completo do run ativo ou do último run concluído.
 
-### FR4: Git Diff & Auto-Commit Supervisor
-- Expandir a capability do supervisor ou adicionar um novo sub-agente com a função de gerar um Git diff real.
-- Ao término de uma rodada, caso alterações no `Shared Context` envolvam também intenções de refatoração aprovadas, o sistema deverá propor a criação de commits locais ou atualização do código fonte real através de ferramentas CLI locais/MCP.
+### FR-04: Bloqueio Concorrente por Banco & Idempotência
+- Se já existir uma execução com `status = 'running'` para o `projectId`, qualquer chamada a `POST /api/projects/:projectId/security/scan` deve retornar HTTP `409 Conflict` informando o `runId` ativo e a fase atual.
+- O frontend deve consultar o `run-status` ao carregar a página e desabilitar os botões de scan se o status for `'running'`.
+
+### FR-05: Stepper Universal de 5 Fases no `SecurityAuditPanel`
+- O `SecurityAuditPanel.tsx` deve incluir o Stepper visual de 5 fases e ticker dinâmico.
+- O estado inicial do Stepper deve ser carregado a partir do `run-status` retornado pelo backend.
+- Se o usuário der refresh na página durante o scan, o frontend recupera a fase e o `run_id`, conectando-se ao Socket.IO para continuar recebendo as atualizações em tempo real.
+
+### FR-06: Preservação de Estado dos Agentes do LangGraph
+- O pipeline de auditoria opera de forma desacoplada do runtime de mensagens/sessões do grafo LangGraph, preservando os agentes, sessões e checkpoints existentes.
 
 ---
 
-## Non-Functional Requirements
-
-### NFR1: Security (LLM Structured Output)
-- **Segurança e Confiabilidade**: O parse manual de respostas JSON usando regex no método `analyzeMessagePriority` deve ser substituído pela feature de *Structured Output* (JSON Schema) da API Gemini.
-- Isso previne injeções de prompt ("Prompt Injection") e quebra de pipeline decorrente de JSONs mal formados.
-
-### NFR2: Performance (Token Accounting & Sumarização)
-- **Eficiência**: Substituir a estratégia atual do `summarizeProject` que utiliza apenas `.slice(-20)` nas mensagens.
-- Implementar uma lógica de "sliding window" baseada em `token accounting` (já disponível no `telemetry-service.ts`) para maximizar o contexto enviado ao LLM sem extrapolar o limite da janela de contexto de forma aleatória, otimizando o gasto e a precisão do resumo.
-
-### NFR3: Process Performance (Resiliência do Daemon)
-- **Disponibilidade**: Eliminar os limites de timeouts estáticos globais (ex: 300000ms) presentes no `bridge-daemon`.
-- Adotar processamento 100% assíncrono avançado que mantenha a saúde da Thread principal, suportando execuções extensas de agentes Red/Blue Team sem causar desconexões ou falsos timeouts na UI.
-
----
-
-## Key Requirements Summary
-Este projeto foca em evoluir a maturidade da aplicação AI-DLC Hivemind Coordinator. O sistema ganhará maior resiliência no tratamento de erros com LLM, mitigação rigorosa de injeção de prompt usando Structured Outputs, e performance inteligente de tokens. Na interface e no controle, o usuário desfrutará de respostas em tempo real via Server-Streaming e o supervisor terá a habilidade de realizar Commits no código ao final da convergência.
+## 3. Non-Functional Requirements (NFR)
+- **NFR-01 (Resiliência a Page Refresh)**: Um refresh no navegador durante ou após o scan não perde o progresso da auditoria; o Stepper exibe a fase real persistida no SQLite.
+- **NFR-02 (Consistência & Integridade Transacional)**: Atualizações de fase devem ser atômicas e com timestamp determinístico.
+- **NFR-03 (Property-Based Invariants)**: Validação com `fast-check` das invariantes de ciclo de vida do `security_runs` (transições válidas $1 \le phase \le 5$, monotonicidade temporal `started_at <= updated_at`, e unicidade de run ativo por projeto).

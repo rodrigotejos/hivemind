@@ -1,21 +1,15 @@
-# User Stories Assessment
+# User Stories Assessment - Iteration 4
 
 ## Request Analysis
-- **Original Request**: Validação de código e plano de melhorias (prompts, LLM security, tokens, streaming, auto-recovery, git commit)
-- **User Impact**: Indirect (resiliência backend e UI/UX streaming feedback para os usuários finais e o supervisor do cockpit)
-- **Complexity Level**: Complex
-- **Stakeholders**: AI Engine (Agents), Human Supervisor (Cockpit User), System Administrator
+- **Original Request**: Persistência do estado do pipeline de segurança no SQLite (`security_runs`), resiliência completa contra page refresh (F5) e alternância de abas, bloqueio estrito contra scans simultâneos (idempotência no banco), Stepper universal presente tanto no `SecurityAuditPanel` quanto no `CockpitPanel`, e preservação completa do runtime de agentes do LangGraph.
+- **User Impact**: Direto e Crítico (confiabilidade da interface, continuidade da auditoria após refresh do navegador, feedback de progresso e prevenção de execuções concorrentes corrompidas).
+- **Scope**: Backend Express/SQLite (tabela `security_runs`, endpoints REST de status e bloqueio) + Frontend React (sincronização de estado de scan no refresh, Stepper unificado).
+- **Complexity**: Alta (sincronização entre banco relacional, memória volátil de jobs, eventos WebSocket em tempo real e re-hidratação do estado no cliente).
 
-## Assessment Criteria Met
-- [x] High Priority: User Experience Changes (Real-time Streaming no Cockpit)
-- [x] Medium Priority: Backend User Impact (Auto-Recovery), Security Enhancements (Structured Outputs)
-- [x] Benefits: Definir claramente as fronteiras do que a interface deve mostrar, o que cada agente deve reportar, e como os fallbacks serão acionados para o usuário e pelo sistema.
-
-## Decision
-**Execute User Stories**: Yes
-**Reasoning**: Embora grande parte seja refatoração técnica de backend e AI, há dois impactos diretos cruciais na experiência do usuário: (1) O Streaming no Cockpit altera como o "Supervisor Humano" consome o raciocínio dos agentes; (2) O Auto-Recovery e as notificações de falha mudam a jornada de suporte/resiliência. O Git Diff & Commit também muda o fluxo de aprovação. Definir essas interações através de histórias de usuário ajudará a não esquecer estados da interface e fluxos de erro.
-
-## Expected Outcomes
-- Esclarecer os estados de UI (loading, streaming, recovered, erro, commit diff) que precisam ser tratados.
-- Definir critérios de aceite testáveis para cenários de retry (quando a API falha 1x, 2x, etc.).
-- Alinhar expectativas do papel "Human Supervisor" sobre o que ele aprova no Auto-Commit.
+## Assessment Decision
+- **Decision**: Executar User Stories
+- **Justification**: A introdução de persistência transacional de execuções assíncronas e sua recuperação determinística na interface após refresh afeta diretamente os fluxos de trabalho e a confiança do usuário no sistema. Histórias de usuário com critérios de aceitação em formato Gherkin são essenciais para especificar o comportamento em cenários de reconexão e bloqueio.
+- **Criteria Met**:
+  - [x] New User Features (Persistência e recuperação de runs)
+  - [x] User Experience Changes (Resiliência a refresh e Stepper universal)
+  - [x] Complex State & Acceptance Criteria Needs (Máquina de estados de execução e idempotência)

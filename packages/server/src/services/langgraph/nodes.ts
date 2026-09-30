@@ -69,7 +69,9 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
 
   if (rolesActed.length === 0) {
     // Primeiro turno: decide o especialista de entrada
-    if (goalLower.includes('figma') || goalLower.includes('tela') || goalLower.includes('frontend') || goalLower.includes('react') || goalLower.includes('css')) {
+    if (goalLower.includes('segurança') || goalLower.includes('security') || goalLower.includes('red team') || goalLower.includes('owasp') || goalLower.includes('vulnerabilidade')) {
+      nextRole = 'delta_security';
+    } else if (goalLower.includes('figma') || goalLower.includes('tela') || goalLower.includes('frontend') || goalLower.includes('react') || goalLower.includes('css')) {
       nextRole = 'alpha_frontend';
     } else if (goalLower.includes('infra') || goalLower.includes('docker') || goalLower.includes('deploy') || goalLower.includes('s3')) {
       nextRole = 'epsilon_infra';
@@ -78,6 +80,13 @@ export async function supervisorNode(state: AgentGraphStateType): Promise<Partia
     }
   } else if (!rolesActed.includes('beta-backend') && (goalLower.includes('api') || goalLower.includes('backend') || goalLower.includes('banco') || goalLower.includes('rota') || goalLower.includes('analise') || goalLower.includes('engenharia reversa') || goalLower.includes('blue team'))) {
     nextRole = 'beta_backend';
+  } else if ((goalLower.includes('segurança') || goalLower.includes('security') || goalLower.includes('owasp')) && rolesActed.includes('delta-security') && rolesActed.includes('beta-backend')) {
+    // Fluxo específico de segurança: Red Team e Blue Team atuaram -> Convergência imediata
+    return {
+      nextStep: 'convergence',
+      isConverged: true,
+      status: 'completed',
+    };
   } else if (!rolesActed.includes('delta-security') && (goalLower.includes('auth') || goalLower.includes('segurança') || goalLower.includes('red team') || goalLower.includes('adversarial') || goalLower.includes('vulnerabilidade') || goalLower.includes('injection'))) {
     nextRole = 'delta_security';
   } else if (!rolesActed.includes('gamma-qa')) {
@@ -156,7 +165,12 @@ export function createAgentWorkerNode(role: AgentRole, agentName: string) {
 
       if (cliResult && cliResult.success && cliResult.output.trim()) {
         const out = cliResult.output.trim();
-        if (!out.startsWith('Olá! Sou o Antigravity') && !out.startsWith('Pronto para receber') && !out.startsWith('Olá! Como posso')) {
+        if (
+          !out.startsWith('Olá! Sou o Antigravity') &&
+          !out.startsWith('Pronto para receber') &&
+          !out.startsWith('Olá! Como posso') &&
+          !out.toLowerCase().startsWith('error:')
+        ) {
           agentResponseText = out;
         }
       }

@@ -194,12 +194,12 @@ export class BridgeDaemonService {
         '--dangerously-skip-permissions',
       ];
 
-      if (request.model && request.model !== 'auto') {
+      // Adiciona flag de modelo apenas se for um identificador suportado diretamente pelo agy
+      if (request.model && request.model !== 'auto' && (request.model.startsWith('gemini-3.') || request.model.startsWith('claude-') || request.model.startsWith('gpt-'))) {
         args.push('--model', request.model);
-      }
-
-      if (request.reasoningLevel) {
-        args.push('--effort', request.reasoningLevel);
+        if (request.reasoningLevel && request.reasoningLevel !== 'off' && !request.model.includes('-high') && !request.model.includes('-medium') && !request.model.includes('-low')) {
+          args.push('--effort', request.reasoningLevel);
+        }
       }
 
       const sanitizedEnv = { ...process.env };
@@ -257,7 +257,15 @@ export class BridgeDaemonService {
 
       // Gerenciamento de resiliência por Lease de Heartbeat (US-8, Resiliency Baseline)
       const leaseManager = HeartbeatLeaseManager.getInstance();
-      leaseManager.acquireLease(streamMsgId, child.pid, 60_000);
+      leaseManager.acquireLease(streamMsgId, child.pid, timeoutMs);
+
+      // Renovação periódica preventiva enquanto o subprocesso estiver vivo
+      const heartbeatInterval = setInterval(() => {
+        if (!isSettled) {
+          leaseManager.renewLease(streamMsgId);
+        }
+      }, 15000);
+      progressTimers.push(heartbeatInterval as any);
 
       const onLeaseExpired = (data: { taskId: string; idleMs: number }) => {
         if (data.taskId === streamMsgId && !isSettled) {
